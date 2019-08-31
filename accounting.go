@@ -9,7 +9,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-	"github.com/cespedes/accounting/backend"
 )
 
 // Currency stores the representation of a currency,
@@ -51,24 +50,35 @@ type Transaction struct {
 
 // Ledger stores all the accounts and transactions in one accounting
 type Ledger struct {
-	Accounts     []Transaction
-	Transactions []Transaction
-}
-
-// Open opens a ledger specified by its backend name and a backend-specific
-// data source name, usually consisting on a file name or a database name
-func Open(backend, dataSource string) (*Ledger, error) {
-	return nil, errors.New("Not implemented")
+	driver Conn
 }
 
 var (
 	driversMu sync.RWMutex
-	drivers   = make(map[string]backend.Driver)
+	drivers   = make(map[string]Backend)
 )
+
+// Open opens a ledger specified by its backend name and a backend-specific
+// data source name, usually consisting on a file name or a database name
+func Open(backend, dataSource string) (*Ledger, error) {
+	driversMu.RLock()
+	defer driversMu.RUnlock()
+	if drivers[backend] == nil {
+		return nil, errors.New("accounting.Open: Backend " + backend + " is not registered.")
+	}
+	conn, err := drivers[backend].Open(dataSource)
+	if err != nil {
+		return nil, err
+	}
+	l := new(Ledger)
+	l.driver = conn
+
+	return l, nil
+}
 
 // Register makes an accounting backend available by the provided name.
 // If Register is called twice with the same name or if driver is nil, it panics.
-func Register(name string, driver backend.Driver) {
+func Register(name string, driver Backend) {
 	driversMu.Lock()
 	defer driversMu.Unlock()
 	if driver == nil {
@@ -85,7 +95,17 @@ func (l *Ledger) Close() error {
 	return errors.New("Not implemented")
 }
 
-// Transaction returns all the transactions concerning that account
+// Accounts returns the list of all the accounts
+func (l *Ledger) Accounts() []Account {
+	return l.driver.Accounts()
+}
+
+// Transactions returns all the transactions
+func (l *Ledger) Transactions() []Transaction {
+	return l.driver.Transactions()
+}
+
+// AccountTransaction returns all the transactions concerning that account
 func (l *Ledger) AccountTransactions(a *Account) []Transaction {
 	return nil
 }
@@ -97,5 +117,10 @@ func (l *Ledger) NewAccount(a Account) error {
 
 // NewTransaction adds a new Transaction in a ledger
 func (l *Ledger) NewTransaction(t Transaction) error {
+	return errors.New("Not implemented")
+}
+
+// EditTransaction edits a Transaction in a ledger
+func (l *Ledger) EditTransaction(t Transaction) error {
 	return errors.New("Not implemented")
 }
