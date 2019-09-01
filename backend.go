@@ -5,6 +5,7 @@ type Backend interface{
 }
 
 type Conn interface {
+	Close()        error
 	Accounts()     []Account
 	Transactions() []Transaction
 }
