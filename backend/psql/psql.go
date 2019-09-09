@@ -49,7 +49,7 @@ package psql
 
 import (
 	"errors"
-	"database/sql"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/cespedes/accounting"
 )
@@ -57,7 +57,7 @@ import (
 type psqlDriver struct {}
 
 func (p psqlDriver) Open(name string) (accounting.Conn, error) {
-	db, err := sql.Open("postgres", name)
+	db, err := sqlx.Open("postgres", name)
 	if err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())
 	}
@@ -72,15 +72,22 @@ func (p psqlDriver) Open(name string) (accounting.Conn, error) {
 }
 
 type conn struct{
-	db *sql.DB
+	db *sqlx.DB
 }
 
 func (c *conn) Close() error {
 	return nil
 }
 
-func (c *conn) Accounts() []accounting.Account {
-	return nil
+func (c *conn) Accounts() (result []accounting.Account) {
+	query := `
+		SELECT a.id,a.name,coalesce(a.code,'') as code,coalesce((100*sum(s.value))::integer,0) as balance from account a left join split s on a.id=s.account_id group by a.id
+	`
+	err := c.db.Select(&result, query)
+	if err != nil {
+		panic(err)
+	}
+	return
 }
 
 func (c *conn) Transactions() []accounting.Transaction {
