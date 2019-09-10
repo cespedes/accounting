@@ -92,7 +92,7 @@ func Register(name string, driver Backend) {
 
 // Close closes the ledger and prevents new queries from starting.
 func (l *Ledger) Close() error {
-	return errors.New("Not implemented")
+	return l.driver.Close()
 }
 
 // Accounts returns the list of all the accounts
@@ -101,7 +101,7 @@ func (l *Ledger) Accounts() []Account {
 }
 
 // Transactions returns all the transactions
-func (l *Ledger) Transactions() []Transaction {
+func (l *Ledger) Transactions() ([]Transaction) {
 	return l.driver.Transactions()
 }
 
