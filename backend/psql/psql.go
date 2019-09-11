@@ -48,17 +48,18 @@ The database to connect must already exist, and must have these tables:
 package psql
 
 import (
-	"errors"
 	"database/sql"
+	"errors"
 	"time"
-	_ "github.com/lib/pq"
+
 	"github.com/cespedes/accounting"
+	_ "github.com/lib/pq" // This package is just for PostgreSQL
 )
 
-type psqlDriver struct {}
+type psqlDriver struct{}
 
 const (
-	RefreshTimeout = 5 * time.Second
+	refreshTimeout = 5 * time.Second
 )
 
 func (p psqlDriver) Open(name string) (accounting.Conn, error) {
@@ -69,18 +70,17 @@ func (p psqlDriver) Open(name string) (accounting.Conn, error) {
 	if err = db.Ping(); err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())
 	}
-	// Now, let's check the SQL schema...
-	// TODO
+	// TODO I should check the SQL schema...
 	conn := new(conn)
 	conn.db = db
 	return conn, nil
 }
 
-type conn struct{
-	db *sql.DB
-	accounts []accounting.Account
+type conn struct {
+	db           *sql.DB
+	accounts     []accounting.Account
 	transactions []accounting.Transaction
-	updated time.Time
+	updated      time.Time
 }
 
 func (c *conn) Close() error {
@@ -89,11 +89,14 @@ func (c *conn) Close() error {
 
 func (c *conn) Accounts() (result []accounting.Account) {
 	t := time.Now()
-	if t.Sub(c.updated) < RefreshTimeout && c.accounts != nil {
+	if t.Sub(c.updated) < refreshTimeout && c.accounts != nil {
 		return c.accounts
 	}
 	query := `
-		SELECT a.id,a.name,coalesce(a.code,'') as code,coalesce((100*sum(s.value))::integer,0) as balance from account a left join split s on a.id=s.account_id group by a.id
+		SELECT a.id, a.name, COALESCE(a.code, '') AS code,
+			COALESCE((100*sum(s.value))::integer, 0) AS balance
+		FROM account a
+		LEFT JOIN split s ON a.id=s.account_id GROUP BY a.id
 	`
 	rows, err := c.db.Query(query)
 	if err != nil {
@@ -101,11 +104,11 @@ func (c *conn) Accounts() (result []accounting.Account) {
 	}
 	for rows.Next() {
 		var (
-			id int
-			name string
-			code string
+			id      int
+			name    string
+			code    string
 			balance int
-			acc accounting.Account
+			acc     accounting.Account
 		)
 		if err := rows.Scan(&id, &name, &code, &balance); err != nil {
 			panic(err)
@@ -123,7 +126,7 @@ func (c *conn) Accounts() (result []accounting.Account) {
 
 func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	t := time.Now()
-	if t.Sub(c.updated) > RefreshTimeout {
+	if t.Sub(c.updated) > refreshTimeout {
 		c.Accounts()
 	} else if c.transactions != nil {
 		return c.transactions
@@ -139,28 +142,27 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	}
 	for rows.Next() {
 		var (
-			date time.Time
-			tid int
-			aid int
-			desc string
-			value int
+			date    time.Time
+			tid     int
+			aid     int
+			desc    string
+			value   int
 			balance int
-			tra *accounting.Transaction
-			split accounting.Split
 		)
 		if err := rows.Scan(&date, &tid, &aid, &desc, &value, &balance); err != nil {
 			panic(err)
 		}
 		if l := len(transactions); l == 0 || transactions[l-1].Id != tid {
 			transactions = append(transactions, accounting.Transaction{
-				Id:tid,
-				Time:date,
-				Description:desc})
+				Id:          tid,
+				Time:        date,
+				Description: desc})
 		}
-		tra = &transactions[len(transactions)-1]
+		var split accounting.Split
 		split.Account = idAccount[aid]
 		split.Value = value
 		split.Balance = balance
+		tra := &transactions[len(transactions)-1]
 		tra.Splits = append(tra.Splits, split)
 	}
 	c.transactions = transactions
