@@ -24,12 +24,12 @@ For more ideas on Currency, see github.com/leekchan/accounting
 
 // Account specifies one origin or destination of funds
 type Account struct {
-	Id       int      // Used to identify this account
+	ID       int      // Used to identify this account
 	Parent   *Account // Optional
 	Name     string   // Common name (ie, "Cash")
 	Code     string   // Optional: for example, account number
 	Balance  int      // Final balance of account
-	Currency Currency // 
+	Currency Currency //
 }
 
 // Split is a deposit or withdrawal from an account
@@ -42,7 +42,7 @@ type Split struct {
 // Transaction stores on entry in the journal, consisting in one description
 // and two or more money movements from different accounts
 type Transaction struct {
-	Id          int       // Used to identify this transaction
+	ID          int       // Used to identify this transaction
 	Time        time.Time // Date and time
 	Description string    // Short description
 	Splits      []Split   // List of movements
@@ -101,11 +101,11 @@ func (l *Ledger) Accounts() []Account {
 }
 
 // Transactions returns all the transactions
-func (l *Ledger) Transactions() ([]Transaction) {
+func (l *Ledger) Transactions() []Transaction {
 	return l.driver.Transactions()
 }
 
-// AccountTransaction returns all the transactions concerning that account
+// AccountTransactions returns all the transactions concerning that account
 func (l *Ledger) AccountTransactions(a *Account) []Transaction {
 	return nil
 }

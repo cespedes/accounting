@@ -2,16 +2,21 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/cespedes/accounting"
-	_ "github.com/cespedes/accounting/backend/psql"
+	_ "github.com/cespedes/accounting/backend/postgres"
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 )
 
 func main() {
-	connStr := "host=localhost user=katiuskas dbname=katiuskas password=veiThoh6ju"
-	ledger, err := accounting.Open("psql", connStr)
+	if len(os.Args) != 2 {
+		fmt.Fprintln(os.Stderr, "Usage: tacc <database>")
+		os.Exit(1)
+	}
+	connStr := os.Args[1]
+	ledger, err := accounting.Open("postgres", connStr)
 	if err != nil {
 		panic(err)
 	}
@@ -51,12 +56,10 @@ func main() {
 	}
 	app.SetRoot(table, true)
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
-		/*
-			_, _, width, _ := table.GetRect()
-			for i := 1; i < table.GetRowCount(); i++ {
-				table.GetCell(i, 1).SetMaxWidth(width - 33)
-			}
-		*/
+		_, _, width, _ := table.GetRect()
+		for i := 1; i < table.GetRowCount(); i++ {
+			table.GetCell(i, 1).SetMaxWidth(width - 33)
+		}
 		return false
 	})
 	if err := app.Run(); err != nil {

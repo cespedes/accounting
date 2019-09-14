@@ -1,5 +1,5 @@
 /*
-Package psql is a Postgres driver for the github.com/cespedes/accounting package.
+Package postgres is a Postgres driver for the github.com/cespedes/accounting package.
 
 You just have to include github.com/cespedes/accounting and this package with a blank
 identifier to begin using it:
@@ -7,12 +7,12 @@ identifier to begin using it:
 	import (
 		"github.com/cespedes/accounting"
 
-		_ "github.com/cespedes/accounting/backend/psql"
+		_ "github.com/cespedes/accounting/backend/postgres"
 	)
 
 	func main() {
 		connStr := "host=localhost user=pqgotest dbname=pqgotest password=secret"
-		ledger, err := accounting.Open("psql", connStr)
+		ledger, err := accounting.Open("postgres", connStr)
 		if err != nil {
 			panic(err)
 		}
@@ -45,7 +45,7 @@ The database to connect must already exist, and must have these tables:
 	  value          NUMERIC
 	);
 */
-package psql
+package postgres
 
 import (
 	"database/sql"
@@ -113,7 +113,7 @@ func (c *conn) Accounts() (result []accounting.Account) {
 		if err := rows.Scan(&id, &name, &code, &balance); err != nil {
 			panic(err)
 		}
-		acc.Id = id
+		acc.ID = id
 		acc.Name = name
 		acc.Code = code
 		acc.Balance = balance
@@ -133,7 +133,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	}
 	idAccount := make(map[int]*accounting.Account)
 	for i, a := range c.accounts {
-		idAccount[a.Id] = &c.accounts[i]
+		idAccount[a.ID] = &c.accounts[i]
 	}
 	query := `SELECT datetime,transaction_id,account_id,description,(100*value)::integer,(100*balance)::integer from money`
 	rows, err := c.db.Query(query)
@@ -152,9 +152,9 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		if err := rows.Scan(&date, &tid, &aid, &desc, &value, &balance); err != nil {
 			panic(err)
 		}
-		if l := len(transactions); l == 0 || transactions[l-1].Id != tid {
+		if l := len(transactions); l == 0 || transactions[l-1].ID != tid {
 			transactions = append(transactions, accounting.Transaction{
-				Id:          tid,
+				ID:          tid,
 				Time:        date,
 				Description: desc})
 		}
@@ -170,5 +170,5 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 }
 
 func init() {
-	accounting.Register("psql", psqlDriver{})
+	accounting.Register("postgres", psqlDriver{})
 }
