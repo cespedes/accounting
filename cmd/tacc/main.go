@@ -5,9 +5,10 @@ import (
 	"os"
 
 	"github.com/cespedes/accounting"
-	_ "github.com/cespedes/accounting/backend/postgres"
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
+
+	_ "github.com/cespedes/accounting/backend/postgres"
 )
 
 func main() {
@@ -15,8 +16,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Usage: tacc <database>")
 		os.Exit(1)
 	}
-	connStr := os.Args[1]
-	ledger, err := accounting.Open("postgres", connStr)
+	ledger, err := accounting.Open(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
@@ -31,6 +31,7 @@ func main() {
 	table.SetTitle(" Accounting ")
 	table.SetSeparator(tview.Borders.Vertical)
 	table.SetFixed(1, 0)
+	table.SetFixedColumnsWidth(true)
 	table.SetSelectable(true, false)
 	table.SetCell(0, 0, tview.NewTableCell("[yellow]date").
 		SetSelectable(false).

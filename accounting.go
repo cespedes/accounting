@@ -1,12 +1,9 @@
-/*
-Package accounting implements a double-entry accounting system.
-
-It can use text (ledger format) or PostgreSQL back-ends
-*/
 package accounting
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -18,9 +15,7 @@ type Currency struct {
 	Decimal int    // Number of significant decimal places
 }
 
-/*
-For more ideas on Currency, see github.com/leekchan/accounting
-*/
+// For more ideas on Currency, see github.com/leekchan/accounting
 
 // Account specifies one origin or destination of funds
 type Account struct {
@@ -39,7 +34,7 @@ type Split struct {
 	Balance int      // Account balance after this transfer
 }
 
-// Transaction stores on entry in the journal, consisting in one description
+// Transaction stores an entry in the journal, consisting in one description
 // and two or more money movements from different accounts
 type Transaction struct {
 	ID          int       // Used to identify this transaction
@@ -58,9 +53,15 @@ var (
 	drivers   = make(map[string]Backend)
 )
 
-// Open opens a ledger specified by its backend name and a backend-specific
-// data source name, usually consisting on a file name or a database name
-func Open(backend, dataSource string) (*Ledger, error) {
+// Open opens a ledger specified by a URL-like string, where the scheme is the
+// backend name and the rest of the URL is backend-specific (usually consisting
+// on a file name or a database name)
+func Open(dataSource string) (*Ledger, error) {
+	url, err := url.Parse(dataSource)
+	if err != nil {
+		return nil, fmt.Errorf("accounting.Open: %v", err)
+	}
+	backend := url.Scheme
 	driversMu.RLock()
 	defer driversMu.RUnlock()
 	if drivers[backend] == nil {
