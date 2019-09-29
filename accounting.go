@@ -19,7 +19,7 @@ type Currency struct {
 
 // Account specifies one origin or destination of funds
 type Account struct {
-	ID       int      // Used to identify this account
+	ID       int      // Used to identify this account.
 	Parent   *Account // Optional
 	Name     string   // Common name (ie, "Cash")
 	Code     string   // Optional: for example, account number
@@ -113,6 +113,11 @@ func (l *Ledger) AccountTransactions(a *Account) []Transaction {
 
 // NewAccount adds a new Account in a ledger
 func (l *Ledger) NewAccount(a Account) error {
+	return errors.New("Not implemented")
+}
+
+// EditAccount edits an Account in a ledger
+func (l *Ledger) EditAccount(a Account) error {
 	return errors.New("Not implemented")
 }
 
