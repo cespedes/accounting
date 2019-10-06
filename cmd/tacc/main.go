@@ -35,6 +35,7 @@ func main() {
 	for i, ac := range accounts {
 		t.SetCell(i, 0, ac.Name)
 		t.SetExpansion(0, 1)
+		t.SetAlign(1, tableview.AlignRight)
 		t.SetCell(i, 1, fmt.Sprintf("%d.%02d", ac.Balance/100, abs(ac.Balance%100)))
 	}
 	t.SetSelectedFunc(func(row int) {
