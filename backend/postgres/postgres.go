@@ -10,13 +10,15 @@ import (
 	_ "github.com/lib/pq" // This package is just for PostgreSQL
 )
 
-type psqlDriver struct{}
+type driver struct{}
 
-const (
-	refreshTimeout = 5 * time.Second
-)
+func init() {
+	accounting.Register("postgres", driver{})
+}
 
-func (p psqlDriver) Open(name string) (accounting.Conn, error) {
+const refreshTimeout = 5 * time.Second
+
+func (driver) Open(name string) (accounting.Conn, error) {
 	db, err := sql.Open("postgres", name)
 	if err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())
@@ -70,7 +72,7 @@ func (c *conn) Accounts() (result []accounting.Account) {
 		acc.ID = id
 		acc.Name = name
 		acc.Code = code
-		acc.Balance = balance
+		// acc.Balance = balance
 		result = append(result, acc)
 	}
 	c.accounts = result
@@ -89,7 +91,9 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	for i, a := range c.accounts {
 		idAccount[a.ID] = &c.accounts[i]
 	}
-	query := `SELECT datetime,transaction_id,account_id,description,(100*value)::integer,(100*balance)::integer from money`
+	query := `
+		SELECT datetime,transaction_id,account_id,description,(100*value)::integer,(100*balance)::integer FROM money
+	`
 	rows, err := c.db.Query(query)
 	if err != nil {
 		panic(err)
@@ -123,6 +127,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	return
 }
 
-func init() {
-	accounting.Register("postgres", psqlDriver{})
+// Flush is a no-op in SQL: all the writes to the database are unbuffered
+func (c *conn) Flush() error {
+	return nil
 }

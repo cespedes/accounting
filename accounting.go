@@ -10,12 +10,12 @@ import (
 
 // Currency stores the representation of a currency,
 // with its name and the number of decimal positions (if any)
+//
+// For more ideas on Currency, see github.com/leekchan/accounting
 type Currency struct {
 	Name    string // "EUR", "USD", etc
 	Decimal int    // Number of significant decimal places
 }
-
-// For more ideas on Currency, see github.com/leekchan/accounting
 
 // Account specifies one origin or destination of funds
 type Account struct {
@@ -23,8 +23,13 @@ type Account struct {
 	Parent   *Account // Optional
 	Name     string   // Common name (ie, "Cash")
 	Code     string   // Optional: for example, account number
-	Balance  int      // Final balance of account
 	Currency Currency //
+}
+
+// AccountBalance specifies an Account and its Balance.
+type AccountBalance struct {
+	Account *Account
+	Balance int
 }
 
 // Split is a deposit or withdrawal from an account
@@ -34,8 +39,8 @@ type Split struct {
 	Balance int      // Account balance after this transfer
 }
 
-// Transaction stores an entry in the journal, consisting in one description
-// and two or more money movements from different accounts
+// Transaction stores an entry in the journal, consisting in a timestamp,
+// a description and two or more money movements from different accounts.
 type Transaction struct {
 	ID          int       // Used to identify this transaction
 	Time        time.Time // Date and time
@@ -50,12 +55,12 @@ type Ledger struct {
 
 var (
 	driversMu sync.RWMutex
-	drivers   = make(map[string]Backend)
+	drivers   = make(map[string]Driver)
 )
 
 // Open opens a ledger specified by a URL-like string, where the scheme is the
 // backend name and the rest of the URL is backend-specific (usually consisting
-// on a file name or a database name)
+// on a file name or a database name).
 func Open(dataSource string) (*Ledger, error) {
 	url, err := url.Parse(dataSource)
 	if err != nil {
@@ -79,7 +84,7 @@ func Open(dataSource string) (*Ledger, error) {
 
 // Register makes an accounting backend available by the provided name.
 // If Register is called twice with the same name or if driver is nil, it panics.
-func Register(name string, driver Backend) {
+func Register(name string, driver Driver) {
 	driversMu.Lock()
 	defer driversMu.Unlock()
 	if driver == nil {
@@ -106,27 +111,121 @@ func (l *Ledger) Transactions() []Transaction {
 	return l.driver.Transactions()
 }
 
-// AccountTransactions returns all the transactions concerning that account
-func (l *Ledger) AccountTransactions(a *Account) []Transaction {
-	return nil
+// GetBalance gets an account balance at a given time.
+// If passed the zero value, it gets the current balance.
+func (l *Ledger) GetBalance(account int, t time.Time) int {
+	x, ok := l.driver.(interface {
+		GetBalance(int, time.Time) int
+	})
+	if ok {
+		return x.GetBalance(account, t)
+	}
+	balance := 0
+	for _, t := range l.TransactionsInAccount(account) {
+		for _, s := range t.Splits {
+			if s.Account.ID == account {
+				balance += s.Value
+			}
+		}
+	}
+	return balance
+}
+
+// TransactionsInAccount gets the list of all the transactions
+// involving that account.
+func (l *Ledger) TransactionsInAccount(account int) []Transaction {
+	x, ok := l.driver.(interface {
+		TransactionsInAccount(int) []Transaction
+	})
+	if ok {
+		return x.TransactionsInAccount(account)
+	}
+	trans := make([]Transaction, 0)
+	for _, t := range l.Transactions() {
+		for _, s := range t.Splits {
+			if s.Account.ID == account {
+				trans = append(trans, t)
+				break
+			}
+		}
+	}
+	return trans
+}
+
+// TransactionsInInterval returns all the transactions between two times.
+func (l *Ledger) TransactionsInInterval(start, end time.Time) []Transaction {
+	x, ok := l.driver.(interface {
+		TransactionsInInterval(time.Time, time.Time) []Transaction
+	})
+	if ok {
+		return x.TransactionsInInterval(start, end)
+	}
+	trans := make([]Transaction, 0)
+	for _, t := range l.Transactions() {
+		if start.After(t.Time) {
+			continue
+		}
+		if end.Before(t.Time) {
+			continue
+		}
+		trans = append(trans, t)
+	}
+	return trans
 }
 
 // NewAccount adds a new Account in a ledger
-func (l *Ledger) NewAccount(a Account) error {
-	return errors.New("Not implemented")
+func (l *Ledger) NewAccount(a Account) (*Account, error) {
+	x, ok := l.driver.(interface {
+		NewAccount(Account) (*Account, error)
+	})
+	if ok {
+		return x.NewAccount(a)
+	}
+	return nil, errors.New("Ledger.NewAccount: not implemented")
 }
 
 // EditAccount edits an Account in a ledger
-func (l *Ledger) EditAccount(a Account) error {
-	return errors.New("Not implemented")
+func (l *Ledger) EditAccount(a Account) (*Account, error) {
+	x, ok := l.driver.(interface {
+		EditAccount(Account) (*Account, error)
+	})
+	if ok {
+		return x.EditAccount(a)
+	}
+	return nil, errors.New("Ledger.EditAccount: not implemented")
 }
 
 // NewTransaction adds a new Transaction in a ledger
-func (l *Ledger) NewTransaction(t Transaction) error {
-	return errors.New("Not implemented")
+func (l *Ledger) NewTransaction(t Transaction) (*Transaction, error) {
+	x, ok := l.driver.(interface {
+		NewTransaction(Transaction) (*Transaction, error)
+	})
+	if ok {
+		return x.NewTransaction(t)
+	}
+	return nil, errors.New("Ledger.NewTransaction: not implemented")
 }
 
 // EditTransaction edits a Transaction in a ledger
-func (l *Ledger) EditTransaction(t Transaction) error {
-	return errors.New("Not implemented")
+func (l *Ledger) EditTransaction(t Transaction) (*Transaction, error) {
+	x, ok := l.driver.(interface {
+		EditTransaction(Transaction) (*Transaction, error)
+	})
+	if ok {
+		return x.EditTransaction(t)
+	}
+	return nil, errors.New("Ledger.EditTransaction: not implemented")
+}
+
+// Flush writes all the pending changes to the backend.
+func (l *Ledger) Flush() error {
+	x, ok := l.driver.(interface {
+		Flush() error
+	})
+	if ok {
+		return x.Flush()
+	}
+	// If not implemented by the backend, we suppose it is not needed
+	// and return nil.
+	return nil
 }

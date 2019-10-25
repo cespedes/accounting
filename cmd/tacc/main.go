@@ -9,6 +9,7 @@ import (
 	"github.com/cespedes/tableview"
 
 	_ "github.com/cespedes/accounting/backend/postgres"
+	_ "github.com/cespedes/accounting/backend/txtdb"
 )
 
 func abs(n int) int {
@@ -36,7 +37,8 @@ func main() {
 		t.SetCell(i, 0, ac.Name)
 		t.SetExpansion(0, 1)
 		t.SetAlign(1, tableview.AlignRight)
-		t.SetCell(i, 1, fmt.Sprintf("%d.%02d", ac.Balance/100, abs(ac.Balance%100)))
+		balance := ledger.GetBalance(ac.ID, time.Time{})
+		t.SetCell(i, 1, fmt.Sprintf("%d.%02d", balance/100, abs(balance%100)))
 	}
 	t.SetSelectedFunc(func(row int) {
 		fmt.Println(row)
