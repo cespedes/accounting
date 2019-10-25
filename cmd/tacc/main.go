@@ -30,6 +30,8 @@ func main() {
 	}
 
 	accounts := ledger.Accounts()
+	transactions := ledger.Transactions()
+	fmt.Printf("%d accounts, %d transactions\n", len(accounts), len(transactions))
 
 	t := tableview.NewTableView()
 	t.FillTable([]string{"account", "balance"}, [][]string{})
