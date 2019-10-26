@@ -40,7 +40,7 @@ func main() {
 	for _, t := range transactions {
 		fmt.Println("\t", t.ID, t.Time, t.Description, len(t.Splits))
 		for _, s := range t.Splits {
-			fmt.Println("\t\t", s.Account, s.Value, s.Balance)
+			fmt.Println("\t\t", s.Account.FullName(), s.Value, s.Balance)
 		}
 	}
 
@@ -49,7 +49,7 @@ func main() {
 	for i, ac := range accounts {
 		t.SetCell(i, 0, strconv.Itoa(ac.ID))
 		t.SetAlign(0, tableview.AlignRight)
-		t.SetCell(i, 1, ac.Name)
+		t.SetCell(i, 1, ac.FullName())
 		t.SetExpansion(1, 1)
 		t.SetAlign(2, tableview.AlignRight)
 		balance := ledger.GetBalance(ac.ID, time.Time{})

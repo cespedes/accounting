@@ -14,7 +14,7 @@ type Conn interface {
 	Close() error
 
 	// Accounts returns the list of all the accounts in the ledger
-	Accounts() []Account
+	Accounts() []*Account
 
 	// Transaction returns all the transactions
 	Transactions() []Transaction
@@ -23,6 +23,9 @@ type Conn interface {
 // ConnExtra contains some extra methods that Conn could support.
 // If it supports any ot these methods, the package will use them.
 type ConnExtra interface {
+	// Account returns the account with the specified id, if present
+	Account(id int) *Account
+
 	// GetBalance gets an account balance at a given time.
 	// If passed the zero value, it gets the current balance.
 	GetBalance(account int, t time.Time) int

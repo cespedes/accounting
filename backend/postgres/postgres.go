@@ -34,7 +34,7 @@ func (driver) Open(name string) (accounting.Conn, error) {
 
 type conn struct {
 	db           *sql.DB
-	accounts     []accounting.Account
+	accounts     []*accounting.Account
 	transactions []accounting.Transaction
 	updated      time.Time
 }
@@ -43,7 +43,7 @@ func (c *conn) Close() error {
 	return c.db.Close()
 }
 
-func (c *conn) Accounts() (result []accounting.Account) {
+func (c *conn) Accounts() (result []*accounting.Account) {
 	t := time.Now()
 	if t.Sub(c.updated) < refreshTimeout && c.accounts != nil {
 		return c.accounts
@@ -73,7 +73,7 @@ func (c *conn) Accounts() (result []accounting.Account) {
 		acc.Name = name
 		acc.Code = code
 		// acc.Balance = balance
-		result = append(result, acc)
+		result = append(result, &acc)
 	}
 	c.accounts = result
 	c.updated = time.Now()
@@ -89,7 +89,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	}
 	idAccount := make(map[int]*accounting.Account)
 	for i, a := range c.accounts {
-		idAccount[a.ID] = &c.accounts[i]
+		idAccount[a.ID] = c.accounts[i]
 	}
 	query := `
 		SELECT datetime,transaction_id,account_id,description,(100*value)::integer,(100*balance)::integer FROM money

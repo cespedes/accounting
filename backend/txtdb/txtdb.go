@@ -22,7 +22,7 @@ const refreshTimeout = 5 * time.Second
 
 type conn struct {
 	dir          string
-	accounts     []accounting.Account
+	accounts     []*accounting.Account
 	accountMap   map[int]*accounting.Account
 	transactions []accounting.Transaction
 	updated      time.Time
@@ -64,7 +64,7 @@ func (c *conn) Flush() error {
 	return errors.New("unimplemented")
 }
 
-func (c *conn) Accounts() (accounts []accounting.Account) {
+func (c *conn) Accounts() (accounts []*accounting.Account) {
 	t := time.Now()
 	if t.Sub(c.updated) < refreshTimeout && c.accounts != nil {
 		return c.accounts
@@ -87,13 +87,15 @@ func (c *conn) Accounts() (accounts []accounting.Account) {
 		}
 		ac.Name = fields[3]
 		ac.Code = fields[4]
-		accounts = append(accounts, ac)
+		parent, err := strconv.Atoi(fields[5])
+		if err == nil {
+			ac.Parent = c.accountMap[parent]
+		}
+		c.accountMap[ac.ID] = &ac
+		accounts = append(accounts, &ac)
 	}
 
 	c.accounts = accounts
-	for i, a := range accounts {
-		c.accountMap[a.ID] = &accounts[i]
-	}
 	c.updated = time.Now()
 	return
 }

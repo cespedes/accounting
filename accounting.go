@@ -26,12 +26,6 @@ type Account struct {
 	Currency Currency //
 }
 
-// AccountBalance specifies an Account and its Balance.
-type AccountBalance struct {
-	Account *Account
-	Balance int
-}
-
 // Split is a deposit or withdrawal from an account
 type Split struct {
 	Account *Account // Origin or destination of funds
@@ -102,13 +96,35 @@ func (l *Ledger) Close() error {
 }
 
 // Accounts returns the list of all the accounts
-func (l *Ledger) Accounts() []Account {
+func (l *Ledger) Accounts() []*Account {
 	return l.driver.Accounts()
 }
 
 // Transactions returns all the transactions
 func (l *Ledger) Transactions() []Transaction {
 	return l.driver.Transactions()
+}
+
+func (l *Ledger) Account(id int) *Account {
+	x, ok := l.driver.(interface {
+		Account(int) *Account
+	})
+	if ok {
+		return x.Account(id)
+	}
+	for _, a := range l.Accounts() {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
+func (a Account) FullName() string {
+	if a.Parent == nil {
+		return a.Name
+	}
+	return a.Parent.FullName() + ":" + a.Name
 }
 
 // GetBalance gets an account balance at a given time.
@@ -122,6 +138,10 @@ func (l *Ledger) GetBalance(account int, when time.Time) int {
 	}
 	balance := 0
 	for _, t := range l.TransactionsInAccount(account) {
+		if (when != time.Time{}) && t.Time.After(when) {
+			continue
+		}
+
 		for _, s := range t.Splits {
 			if s.Account.ID == account {
 				balance += s.Value
