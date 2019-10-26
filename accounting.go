@@ -90,6 +90,18 @@ func Register(name string, driver Driver) {
 	drivers[name] = driver
 }
 
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func (l *Ledger) Money(value int) string {
+	// TODO: support different currency formats
+	return fmt.Sprintf("%d.%02d", value/100, abs(value%100))
+}
+
 // Close closes the ledger and prevents new queries from starting.
 func (l *Ledger) Close() error {
 	return l.driver.Close()

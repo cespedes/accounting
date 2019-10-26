@@ -13,11 +13,46 @@ import (
 	_ "github.com/cespedes/accounting/backend/txtdb"
 )
 
-func abs(n int) int {
-	if n < 0 {
-		return -n
+func tableAccounts(l *accounting.Ledger) {
+	accounts := l.Accounts()
+
+	t := tableview.NewTableView()
+	t.FillTable([]string{"id", "account", "balance"}, [][]string{})
+	for i, ac := range accounts {
+		t.SetCell(i, 0, strconv.Itoa(ac.ID))
+		t.SetAlign(0, tableview.AlignRight)
+		t.SetCell(i, 1, ac.FullName())
+		t.SetExpansion(1, 1)
+		t.SetAlign(2, tableview.AlignRight)
+		balance := l.GetBalance(ac.ID, time.Time{})
+		t.SetCell(i, 2, l.Money(balance))
 	}
-	return n
+	t.SetSelectedFunc(func(row int) {
+		tableTransactions(l, accounts[row-1].ID)
+	})
+	t.Run()
+}
+
+func tableTransactions(l *accounting.Ledger, acc int) {
+	transactions := l.TransactionsInAccount(acc)
+	fmt.Printf("account %d: %d transactions\n", acc, len(transactions))
+	t := tableview.NewTableView()
+	t.FillTable([]string{"date", "description", "value", "balance"}, [][]string{})
+	for i, tr := range transactions {
+		var sp accounting.Split
+		for _, sp = range tr.Splits {
+			if sp.Account.ID == acc {
+				break
+			}
+		}
+		t.SetCell(i, 0, tr.Time.Format("02-01-2006"))
+		t.SetCell(i, 1, tr.Description)
+		t.SetCell(i, 2, l.Money(sp.Value))
+		t.SetAlign(2, tableview.AlignRight)
+		t.SetCell(i, 3, l.Money(sp.Balance))
+		t.SetAlign(3, tableview.AlignRight)
+	}
+	t.Run()
 }
 
 func main() {
@@ -30,36 +65,7 @@ func main() {
 		panic(err)
 	}
 
-	accounts := ledger.Accounts()
-	transactions := ledger.Transactions()
-	fmt.Printf("%d accounts, %d transactions\n", len(accounts), len(transactions))
-	fmt.Println("* Accounts")
-	for _, a := range accounts {
-		fmt.Println("\t", a.ID, a.Name)
-	}
-	for _, t := range transactions {
-		fmt.Println("\t", t.ID, t.Time, t.Description, len(t.Splits))
-		for _, s := range t.Splits {
-			fmt.Println("\t\t", s.Account.FullName(), s.Value, s.Balance)
-		}
-	}
-
-	t := tableview.NewTableView()
-	t.FillTable([]string{"id", "account", "balance"}, [][]string{})
-	for i, ac := range accounts {
-		t.SetCell(i, 0, strconv.Itoa(ac.ID))
-		t.SetAlign(0, tableview.AlignRight)
-		t.SetCell(i, 1, ac.FullName())
-		t.SetExpansion(1, 1)
-		t.SetAlign(2, tableview.AlignRight)
-		balance := ledger.GetBalance(ac.ID, time.Time{})
-		t.SetCell(i, 2, fmt.Sprintf("%d.%02d", balance/100, abs(balance%100)))
-	}
-	t.SetSelectedFunc(func(row int) {
-		fmt.Println(row)
-		time.Sleep(3 * time.Second)
-	})
-	t.Run()
+	tableAccounts(ledger)
 	/*
 		transactions := ledger.Transactions()
 
