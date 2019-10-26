@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cespedes/accounting"
@@ -32,15 +33,27 @@ func main() {
 	accounts := ledger.Accounts()
 	transactions := ledger.Transactions()
 	fmt.Printf("%d accounts, %d transactions\n", len(accounts), len(transactions))
+	fmt.Println("* Accounts")
+	for _, a := range accounts {
+		fmt.Println("\t", a.ID, a.Name)
+	}
+	for _, t := range transactions {
+		fmt.Println("\t", t.ID, t.Time, t.Description, len(t.Splits))
+		for _, s := range t.Splits {
+			fmt.Println("\t\t", s.Account, s.Value, s.Balance)
+		}
+	}
 
 	t := tableview.NewTableView()
-	t.FillTable([]string{"account", "balance"}, [][]string{})
+	t.FillTable([]string{"id", "account", "balance"}, [][]string{})
 	for i, ac := range accounts {
-		t.SetCell(i, 0, ac.Name)
-		t.SetExpansion(0, 1)
-		t.SetAlign(1, tableview.AlignRight)
+		t.SetCell(i, 0, strconv.Itoa(ac.ID))
+		t.SetAlign(0, tableview.AlignRight)
+		t.SetCell(i, 1, ac.Name)
+		t.SetExpansion(1, 1)
+		t.SetAlign(2, tableview.AlignRight)
 		balance := ledger.GetBalance(ac.ID, time.Time{})
-		t.SetCell(i, 1, fmt.Sprintf("%d.%02d", balance/100, abs(balance%100)))
+		t.SetCell(i, 2, fmt.Sprintf("%d.%02d", balance/100, abs(balance%100)))
 	}
 	t.SetSelectedFunc(func(row int) {
 		fmt.Println(row)

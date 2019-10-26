@@ -113,12 +113,12 @@ func (l *Ledger) Transactions() []Transaction {
 
 // GetBalance gets an account balance at a given time.
 // If passed the zero value, it gets the current balance.
-func (l *Ledger) GetBalance(account int, t time.Time) int {
+func (l *Ledger) GetBalance(account int, when time.Time) int {
 	x, ok := l.driver.(interface {
 		GetBalance(int, time.Time) int
 	})
 	if ok {
-		return x.GetBalance(account, t)
+		return x.GetBalance(account, when)
 	}
 	balance := 0
 	for _, t := range l.TransactionsInAccount(account) {
@@ -143,12 +143,14 @@ func (l *Ledger) TransactionsInAccount(account int) []Transaction {
 	trans := make([]Transaction, 0)
 	for _, t := range l.Transactions() {
 		for _, s := range t.Splits {
+			//			log.Printf("s.Account.ID=%d account=%d", s.Account.ID, account)
 			if s.Account.ID == account {
 				trans = append(trans, t)
 				break
 			}
 		}
 	}
+	// log.Printf("Ledger.TransactionsInAccount(%d): %d trans", account, len(trans))
 	return trans
 }
 

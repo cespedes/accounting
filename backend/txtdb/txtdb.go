@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,9 +18,7 @@ import (
 
 type txtDriver struct{}
 
-const (
-	refreshTimeout = 5 * time.Second
-)
+const refreshTimeout = 5 * time.Second
 
 type conn struct {
 	dir          string
@@ -91,8 +91,8 @@ func (c *conn) Accounts() (accounts []accounting.Account) {
 	}
 
 	c.accounts = accounts
-	for _, a := range accounts {
-		c.accountMap[a.ID] = &a
+	for i, a := range accounts {
+		c.accountMap[a.ID] = &accounts[i]
 	}
 	c.updated = time.Now()
 	return
@@ -111,9 +111,9 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	}
 	sc := bufio.NewScanner(f)
 	nextID := 1
-	// balance := 0
+	balance := 0
 	var tr *accounting.Transaction
-	for i := 0; sc.Scan(); i++ {
+	for i := 1; sc.Scan(); i++ {
 		if tr == nil {
 			tr = new(accounting.Transaction)
 		}
@@ -123,28 +123,63 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		if len(fields) != 7 { // badly-formatted line: skip
 			continue
 		}
-		id, err := strconv.Atoi(fields[0])
-		if err != nil {
-			id = nextID
-		}
-		if tr.ID == 0 {
-			tr.ID = id
-		}
-		if id != tr.ID {
-			panic("id != tr.ID")
-		}
-		tr.Time, err = time.Parse("2006-01-02 15.04", fields[1])
-		if err != nil {
-			tr.Time, err = time.Parse("2006-01-02", fields[1])
-		}
-		if err != nil { // TODO: handle errors
+		if len(fields[5]) == 0 {
+			if balance != 0 {
+				log.Printf("transactions line %d: no value inside transaction (balance=%d)", i, balance)
+				balance = 0
+				tr = nil
+				continue
+			}
 			continue
 		}
-		tr.Description = fields[2]
-		transactions = append(transactions, *tr)
-		tr = nil
+		if tr.ID == 0 { // Fill tr only if it is not already filled
+			// First field (used to be "id") is ignored
+			tr.ID = nextID
+			tr.Time, err = time.Parse("2006-01-02 15.04", strings.TrimSpace(fields[1]))
+			if err != nil {
+				tr.Time, err = time.Parse("2006-01-02", strings.TrimSpace(fields[1]))
+			}
+			if err != nil {
+				log.Printf("transactions line %d: datetime error (%s)\n", i, strings.TrimSpace(fields[1]))
+				continue
+			}
+			tr.Description = fields[2]
+		}
+		accountID, err := strconv.Atoi(fields[4])
+		if err != nil {
+			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
+			continue
+		}
+		var sp accounting.Split
+		sp.Account = c.accountMap[accountID]
+		if sp.Account == nil {
+			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
+			continue
+		}
+		var sign int
+		if fields[5][0] == '+' {
+			sign = 1
+		} else if fields[5][0] == '-' {
+			sign = -1
+		} else {
+			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
+			continue
+		}
+		f, err := strconv.ParseFloat(fields[5][1:], 64)
+		if err != nil {
+			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
+			continue
+		}
+		sp.Value = sign * int(math.Round(100*f))
+		sp.Balance = accountID // TODO FIXME XXX
+		balance += sp.Value
+		tr.Splits = append(tr.Splits, sp)
+		if balance == 0 {
+			transactions = append(transactions, *tr)
+			tr = nil
+			nextID++
+		}
 	}
-
 	c.transactions = transactions
 	return
 }
