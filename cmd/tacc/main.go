@@ -18,11 +18,11 @@ func tableAccounts(l *accounting.Ledger) {
 
 	t := tableview.NewTableView()
 	t.FillTable([]string{"id", "account", "balance"}, [][]string{})
+	t.SetExpansion(1, 1)
 	for i, ac := range accounts {
 		t.SetCell(i, 0, strconv.Itoa(ac.ID))
 		t.SetAlign(0, tableview.AlignRight)
 		t.SetCell(i, 1, ac.FullName())
-		t.SetExpansion(1, 1)
 		t.SetAlign(2, tableview.AlignRight)
 		balance := l.GetBalance(ac.ID, time.Time{})
 		t.SetCell(i, 2, l.Money(balance))
@@ -38,6 +38,7 @@ func tableTransactions(l *accounting.Ledger, acc int) {
 	fmt.Printf("account %d: %d transactions\n", acc, len(transactions))
 	t := tableview.NewTableView()
 	t.FillTable([]string{"date", "description", "value", "balance"}, [][]string{})
+	t.SetExpansion(1, 1)
 	for i, tr := range transactions {
 		var sp accounting.Split
 		for _, sp = range tr.Splits {

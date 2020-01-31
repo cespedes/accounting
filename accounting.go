@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"sync"
 	"time"
 )
@@ -107,16 +108,17 @@ func (l *Ledger) Close() error {
 	return l.driver.Close()
 }
 
-// Accounts returns the list of all the accounts
+// Accounts returns the list of all the accounts.
 func (l *Ledger) Accounts() []*Account {
 	return l.driver.Accounts()
 }
 
-// Transactions returns all the transactions
+// Transactions returns all the transactions.
 func (l *Ledger) Transactions() []Transaction {
 	return l.driver.Transactions()
 }
 
+// Account returns details for one account, given its id.
 func (l *Ledger) Account(id int) *Account {
 	x, ok := l.driver.(interface {
 		Account(int) *Account
@@ -132,6 +134,9 @@ func (l *Ledger) Account(id int) *Account {
 	return nil
 }
 
+// FullName returns the fully qualified name of the account:
+// the name of all its ancestors, separated by ":", and ending
+// with this account's name.
 func (a Account) FullName() string {
 	if a.Parent == nil {
 		return a.Name
@@ -175,7 +180,7 @@ func (l *Ledger) TransactionsInAccount(account int) []Transaction {
 	trans := make([]Transaction, 0)
 	for _, t := range l.Transactions() {
 		for _, s := range t.Splits {
-			//			log.Printf("s.Account.ID=%d account=%d", s.Account.ID, account)
+			// log.Printf("s.Account.ID=%d account=%d", s.Account.ID, account)
 			if s.Account.ID == account {
 				trans = append(trans, t)
 				break
@@ -262,4 +267,13 @@ func (l *Ledger) Flush() error {
 	// If not implemented by the backend, we suppose it is not needed
 	// and return nil.
 	return nil
+}
+
+// SortAccounts returns a properly sorted copy of a slice of accounts.
+// Input parameter "accounts" may be modified by this function.
+func SortAccounts(accounts []*Account) []*Account {
+	sort.Slice(accounts, func(i, j int) bool {
+		return accounts[i].FullName() < accounts[j].FullName()
+	})
+	return accounts
 }

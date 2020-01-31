@@ -22,6 +22,8 @@ type Conn interface {
 
 // ConnExtra contains some extra methods that Conn could support.
 // If it supports any ot these methods, the package will use them.
+// If they are not available, it will fall back to another approach,
+// or fail if it is not possible.
 type ConnExtra interface {
 	// Account returns the account with the specified id, if present
 	Account(id int) *Account

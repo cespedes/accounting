@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -94,8 +95,7 @@ func (c *conn) Accounts() (accounts []*accounting.Account) {
 		c.accountMap[ac.ID] = &ac
 		accounts = append(accounts, &ac)
 	}
-
-	c.accounts = accounts
+	c.accounts = accounting.SortAccounts(accounts)
 	c.updated = time.Now()
 	return
 }
@@ -180,6 +180,20 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			transactions = append(transactions, *tr)
 			tr = nil
 			nextID++
+		}
+	}
+	sort.Slice(transactions, func(i, j int) bool {
+		if transactions[i].Time == transactions[j].Time {
+			return i < j
+		}
+		return transactions[i].Time.Before(transactions[j].Time)
+	})
+	accountBalances := make(map[*accounting.Account]int)
+	for i := range transactions {
+		for j := range transactions[i].Splits {
+			s := &transactions[i].Splits[j]
+			accountBalances[s.Account] += s.Value
+			s.Balance = accountBalances[s.Account]
 		}
 	}
 	c.transactions = transactions
