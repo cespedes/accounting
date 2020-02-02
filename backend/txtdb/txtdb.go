@@ -113,7 +113,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 	}
 	sc := bufio.NewScanner(f)
 	nextID := 1
-	balance := 0
+	var balance int64
 	var tr *accounting.Transaction
 	for i := 1; sc.Scan(); i++ {
 		if tr == nil {
@@ -158,7 +158,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
 			continue
 		}
-		var sign int
+		var sign int64
 		if fields[5][0] == '+' {
 			sign = 1
 		} else if fields[5][0] == '-' {
@@ -172,9 +172,10 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
 			continue
 		}
-		sp.Value = sign * int(math.Round(100*f))
-		sp.Balance = accountID // TODO FIXME XXX
-		balance += sp.Value
+		sp.Value.Currency = nil
+		sp.Value.Amount = sign * int64(math.Round(100*f)) * 1000_000
+		sp.Balance = make(accounting.Balance) // TODO FIXME XXX
+		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
 			transactions = append(transactions, *tr)
@@ -188,11 +189,14 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		}
 		return transactions[i].Time.Before(transactions[j].Time)
 	})
-	accountBalances := make(map[*accounting.Account]int)
+	accountBalances := make(map[*accounting.Account]accounting.Balance)
 	for i := range transactions {
 		for j := range transactions[i].Splits {
 			s := &transactions[i].Splits[j]
-			accountBalances[s.Account] += s.Value
+			if accountBalances[s.Account] == nil {
+				accountBalances[s.Account] = make(accounting.Balance)
+			}
+			accountBalances[s.Account][s.Value.Currency] += s.Value.Amount
 			s.Balance = accountBalances[s.Account]
 		}
 	}

@@ -104,7 +104,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			tid     int
 			aid     int
 			desc    string
-			value   int
+			value   int64
 			balance int
 		)
 		if err := rows.Scan(&date, &tid, &aid, &desc, &value, &balance); err != nil {
@@ -118,8 +118,8 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		}
 		var split accounting.Split
 		split.Account = idAccount[aid]
-		split.Value = value
-		split.Balance = balance
+		split.Value.Currency = nil
+		split.Value.Amount = value
 		tra := &transactions[len(transactions)-1]
 		tra.Splits = append(tra.Splits, split)
 	}

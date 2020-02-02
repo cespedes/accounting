@@ -14,24 +14,34 @@ import (
 //
 // For more ideas on Currency, see github.com/leekchan/accounting
 type Currency struct {
-	Name    string // "EUR", "USD", etc
-	Decimal int    // Number of significant decimal places
+	Name        string // "EUR", "USD", etc
+	PrintBefore bool   // "$1.00" vs "1.00$"
+	PrintSpace  bool   // "1.00EUR" vs "1.00 EUR"
+	Thousand    string // What to use (if any) every 3 digits
+	Decimal     string // decimal separator ("." if empty)
+	Precision   int    // Number of significant decimal places
 }
 
 // Account specifies one origin or destination of funds
 type Account struct {
-	ID       int      // Used to identify this account.
-	Parent   *Account // Optional
-	Name     string   // Common name (ie, "Cash")
-	Code     string   // Optional: for example, account number
-	Currency Currency //
+	ID     int      // Used to identify this account.
+	Parent *Account // Optional
+	Name   string   // Common name (ie, "Cash")
+	Code   string   // Optional: for example, account number
 }
+
+type Value struct {
+	Amount   int64     // Amount (actual value times 10^8)
+	Currency *Currency // Currency of commodity
+}
+
+type Balance map[*Currency]int64
 
 // Split is a deposit or withdrawal from an account
 type Split struct {
 	Account *Account // Origin or destination of funds
-	Value   int      // Amount to be transferred
-	Balance int      // Account balance after this transfer
+	Value   Value    // Amount to be transferred
+	Balance Balance  // Partial balance of this account, after this movement
 }
 
 // Transaction stores an entry in the journal, consisting in a timestamp,
@@ -91,16 +101,47 @@ func Register(name string, driver Driver) {
 	drivers[name] = driver
 }
 
-func abs(n int) int {
+func abs64(n int64) int64 {
 	if n < 0 {
 		return -n
 	}
 	return n
 }
 
-func (l *Ledger) Money(value int) string {
-	// TODO: support different currency formats
-	return fmt.Sprintf("%d.%02d", value/100, abs(value%100))
+// Money returns a string with the correct representation of a value,
+// including its currency.
+func Money(value Value) string {
+	var result string
+	var c Currency
+	i := value.Amount / 100_000_000
+	d := value.Amount % 100_000_000
+	if value.Currency != nil {
+		c = *value.Currency
+	}
+	if c.Decimal == "" {
+		c.Decimal = "."
+	}
+	integer := fmt.Sprintf("%d", i)
+	for n, l := 0, len(integer); n < 1+(l-1)/3; n++ {
+		if n > 0 {
+			result += c.Thousand
+		}
+		end := 3*(n+1) - 3 + l%3
+		start := end - 3
+		if start < 0 {
+			start = 0
+		}
+		// result += fmt.Sprintf("[%d,%d]", start, end)
+		result += integer[start:end]
+	}
+	if c.Precision < 0 || c.Precision > 8 {
+		panic(fmt.Sprintf("Money: invalid precision %d", c.Precision))
+	}
+	if c.Precision > 0 {
+		result += c.Decimal
+		result += fmt.Sprintf("%08d", d)[:c.Precision]
+	}
+	return result
 }
 
 // Close closes the ledger and prevents new queries from starting.
@@ -146,14 +187,14 @@ func (a Account) FullName() string {
 
 // GetBalance gets an account balance at a given time.
 // If passed the zero value, it gets the current balance.
-func (l *Ledger) GetBalance(account int, when time.Time) int {
+func (l *Ledger) GetBalance(account int, when time.Time) Balance {
 	x, ok := l.driver.(interface {
-		GetBalance(int, time.Time) int
+		GetBalance(int, time.Time) Balance
 	})
 	if ok {
 		return x.GetBalance(account, when)
 	}
-	balance := 0
+	balance := make(Balance)
 	for _, t := range l.TransactionsInAccount(account) {
 		if (when != time.Time{}) && t.Time.After(when) {
 			continue
@@ -161,7 +202,7 @@ func (l *Ledger) GetBalance(account int, when time.Time) int {
 
 		for _, s := range t.Splits {
 			if s.Account.ID == account {
-				balance += s.Value
+				balance[s.Value.Currency] += s.Value.Amount
 			}
 		}
 	}

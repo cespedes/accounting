@@ -24,7 +24,10 @@ func tableAccounts(l *accounting.Ledger) {
 		t.SetAlign(0, tableview.AlignRight)
 		t.SetCell(i, 1, ac.FullName())
 		t.SetAlign(2, tableview.AlignRight)
-		balance := l.GetBalance(ac.ID, time.Time{})
+		var balance accounting.Value
+		for _, a := range (l.GetBalance(ac.ID, time.Time{})) {
+			balance.Amount += a
+		}
 		t.SetCell(i, 2, l.Money(balance))
 	}
 	t.SetSelectedFunc(func(row int) {
