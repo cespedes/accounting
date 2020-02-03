@@ -118,6 +118,13 @@ func Money(value Value) string {
 	if value.Currency != nil {
 		c = *value.Currency
 	}
+
+	if c.PrintBefore {
+		result += c.Name
+		if c.PrintSpace {
+			result += " "
+		}
+	}
 	if c.Decimal == "" {
 		c.Decimal = "."
 	}
@@ -126,7 +133,7 @@ func Money(value Value) string {
 		if n > 0 {
 			result += c.Thousand
 		}
-		end := 3*(n+1) - 3 + l%3
+		end := 3*n + (l-1)%3 + 1
 		start := end - 3
 		if start < 0 {
 			start = 0
@@ -141,6 +148,13 @@ func Money(value Value) string {
 		result += c.Decimal
 		result += fmt.Sprintf("%08d", d)[:c.Precision]
 	}
+	if !c.PrintBefore {
+		if c.PrintSpace {
+			result += " "
+		}
+		result += c.Name
+	}
+
 	return result
 }
 
