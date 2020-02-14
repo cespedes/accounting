@@ -64,9 +64,9 @@ func abs64(n int64) int64 {
 	return n
 }
 
-// Money returns a string with the correct representation of a value,
-// including its currency.
-func Money(value Value) string {
+// String returns a string with the correct
+// representation of that value, including its currency.
+func (value Value) String() string {
 	var result string
 	var c Currency
 	i := value.Amount / 100_000_000
@@ -112,6 +112,19 @@ func Money(value Value) string {
 	}
 
 	return result
+}
+
+// String returns "0" for empty balances, or a list of its values
+func (b Balance) String() string {
+	if len(b) == 0 {
+		return "0"
+	}
+	var s string
+	for c, a := range b {
+		var v = Value{Amount: a, Currency: c}
+		s = s + v.String()
+	}
+	return s
 }
 
 // Close closes the ledger and prevents new queries from starting.

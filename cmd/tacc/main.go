@@ -28,7 +28,7 @@ func tableAccounts(l *accounting.Ledger) {
 		for _, a := range (l.GetBalance(ac.ID, time.Time{})) {
 			balance.Amount += a
 		}
-		t.SetCell(i, 2, l.Money(balance))
+		t.SetCell(i, 2, balance.String())
 	}
 	t.SetSelectedFunc(func(row int) {
 		tableTransactions(l, accounts[row-1].ID)
@@ -51,9 +51,9 @@ func tableTransactions(l *accounting.Ledger, acc int) {
 		}
 		t.SetCell(i, 0, tr.Time.Format("02-01-2006"))
 		t.SetCell(i, 1, tr.Description)
-		t.SetCell(i, 2, l.Money(sp.Value))
+		t.SetCell(i, 2, sp.Value.String())
 		t.SetAlign(2, tableview.AlignRight)
-		t.SetCell(i, 3, l.Money(sp.Balance))
+		t.SetCell(i, 3, sp.Balance.String())
 		t.SetAlign(3, tableview.AlignRight)
 	}
 	t.Run()

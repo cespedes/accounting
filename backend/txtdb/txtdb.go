@@ -27,6 +27,7 @@ type conn struct {
 	accountMap   map[int]*accounting.Account
 	transactions []accounting.Transaction
 	updated      time.Time
+	currency     accounting.Currency // just one currency for now
 }
 
 // Opens a connection to a txtdb database
@@ -172,9 +173,8 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
 			continue
 		}
-		sp.Value.Currency = nil
+		sp.Value.Currency = &c.currency
 		sp.Value.Amount = sign * int64(math.Round(100*f)) * 1000_000
-		sp.Balance = make(accounting.Balance) // TODO FIXME XXX
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
