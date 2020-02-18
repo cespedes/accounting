@@ -69,18 +69,22 @@ func abs64(n int64) int64 {
 func (value Value) String() string {
 	var result string
 	var c Currency
-	i := value.Amount / 100_000_000
-	d := value.Amount % 100_000_000
+
 	if value.Currency != nil {
 		c = *value.Currency
 	}
-
 	if c.PrintBefore {
 		result += c.Name
 		if c.PrintSpace {
 			result += " "
 		}
 	}
+	if value.Amount < 0 {
+		result += "-"
+		value.Amount = -value.Amount
+	}
+	i := value.Amount / 100_000_000
+	d := value.Amount % 100_000_000
 	if c.Decimal == "" {
 		c.Decimal = "."
 	}

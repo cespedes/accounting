@@ -1,9 +1,11 @@
 module github.com/cespedes/accounting
 
 require (
-	github.com/cespedes/tableview v0.0.0-20191024205355-0563a136122d
-	github.com/lib/pq v1.2.0
-	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037 // indirect
+	github.com/cespedes/tableview v0.1.1
+	github.com/lib/pq v1.3.0
+	github.com/mattn/go-runewidth v0.0.8 // indirect
+	github.com/rivo/tview v0.0.0-20200204110323-ae3d8cac5e4b // indirect
+	golang.org/x/sys v0.0.0-20200212091648-12a6c2dcc1e4 // indirect
 )
 
 go 1.13

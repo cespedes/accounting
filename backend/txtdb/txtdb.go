@@ -39,22 +39,24 @@ func (p txtDriver) Open(name string) (accounting.Conn, error) {
 	conn := new(conn)
 	conn.dir = url.Path
 	conn.accountMap = make(map[int]*accounting.Account)
+	conn.currency.Precision = 2
 	tra := filepath.Join(conn.dir, "transactions")
 	acc := filepath.Join(conn.dir, "accounts")
-	if fi, err := os.Stat(tra); err != nil {
+	fi, err := os.Stat(tra)
+	if err != nil {
 		return nil, err
-	} else {
-		if !fi.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s: %w", acc, err)
-		}
 	}
-	if fi, err := os.Stat(acc); err != nil {
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %w", acc, err)
+	}
+	fi, err = os.Stat(acc)
+	if err != nil {
 		return nil, err
-	} else {
-		if !fi.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s: %w", acc, err)
-		}
 	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %w", acc, err)
+	}
+
 	return conn, nil
 }
 

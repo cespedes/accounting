@@ -9,6 +9,7 @@ import (
 	"github.com/cespedes/accounting"
 	"github.com/cespedes/tableview"
 
+	_ "github.com/cespedes/accounting/backend/ledger"
 	_ "github.com/cespedes/accounting/backend/postgres"
 	_ "github.com/cespedes/accounting/backend/txtdb"
 )

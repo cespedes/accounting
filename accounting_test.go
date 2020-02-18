@@ -4,9 +4,7 @@ import (
 	"testing"
 )
 
-const U = 100_000_000
-
-func TestMoney(t *testing.T) {
+func TestCurrencyString(t *testing.T) {
 	var v Value
 
 	if got := v.String(); got != "0" {
@@ -58,6 +56,13 @@ func TestMoney(t *testing.T) {
 	v.Currency.Decimal = ""
 	if got := v.String(); got != "0.23" {
 		t.Errorf("Money(0.23) = %q", got)
+	}
+
+	v.Amount = -0.2345 * U
+	v.Currency.Precision = 2
+	v.Currency.Decimal = ""
+	if got := v.String(); got != "-0.23" {
+		t.Errorf("Money(-0.23) = %q", got)
 	}
 
 	v.Amount = 9876.2345 * U
@@ -132,6 +137,14 @@ func TestMoney(t *testing.T) {
 		t.Errorf("Money(23,45€) = %q", got)
 	}
 
+	v.Amount = -23.45 * U
+	v.Currency.Precision = 2
+	v.Currency.Decimal = ","
+	v.Currency.Name = "€"
+	if got := v.String(); got != "-23,45€" {
+		t.Errorf("Money(-23,45€) = %q", got)
+	}
+
 	v.Amount = 23.45 * U
 	v.Currency.Precision = 2
 	v.Currency.Decimal = ","
@@ -151,6 +164,16 @@ func TestMoney(t *testing.T) {
 		t.Errorf("Money(USD 23.45) = %q", got)
 	}
 
+	v.Amount = -23.45 * U
+	v.Currency.Precision = 2
+	v.Currency.Decimal = "."
+	v.Currency.Name = "USD"
+	v.Currency.PrintBefore = true
+	v.Currency.PrintSpace = true
+	if got := v.String(); got != "USD -23.45" {
+		t.Errorf("Money(USD -23.45) = %q", got)
+	}
+
 	v.Amount = 23.45 * U
 	v.Currency.Precision = 2
 	v.Currency.Decimal = "."
@@ -159,5 +182,25 @@ func TestMoney(t *testing.T) {
 	v.Currency.PrintSpace = false
 	if got := v.String(); got != "$23.45" {
 		t.Errorf("Money($23.45) = %q", got)
+	}
+
+	v.Amount = -23.45 * U
+	v.Currency.Precision = 2
+	v.Currency.Decimal = "."
+	v.Currency.Name = "$"
+	v.Currency.PrintBefore = true
+	v.Currency.PrintSpace = false
+	if got := v.String(); got != "$-23.45" {
+		t.Errorf("Money($-23.45) = %q", got)
+	}
+
+	v.Amount = -23.45 * U
+	v.Currency.Precision = 2
+	v.Currency.Decimal = "."
+	v.Currency.Name = ""
+	v.Currency.PrintBefore = true
+	v.Currency.PrintSpace = false
+	if got := v.String(); got != "-23.45" {
+		t.Errorf("Money(-23.45) = %q", got)
 	}
 }

@@ -2,8 +2,11 @@ package accounting
 
 import "time"
 
-// Currency stores the representation of a currency,
-// with its name and the number of decimal positions (if any).
+// U is the amount by which every amount must be multiplied before storing it
+const U = 100_000_000
+
+// Currency represents a currency or commodity, and stores
+// its name and how to display it with an amount.
 //
 // For more ideas on Currency, see github.com/leekchan/accounting
 type Currency struct {
@@ -26,10 +29,11 @@ type Balance map[*Currency]int64
 
 // Account specifies one origin or destination of funds.
 type Account struct {
-	ID     int      // Used to identify this account.
-	Parent *Account // Optional
-	Name   string   // Common name (ie, "Cash")
-	Code   string   // Optional: for example, account number
+	ID      int      // Used to identify this account.
+	Parent  *Account // Optional
+	Name    string   // Common name (ie, "Cash")
+	Code    string   // Optional: for example, account number
+	Comment string   // Optional
 }
 
 // Split is a deposit or withdrawal from an account.
@@ -47,6 +51,7 @@ type Price struct {
 	Currency *Currency
 	Time     time.Time
 	Value    Value
+	Comment  string
 }
 
 // A Tag is a label which can be added to a transaction or movement.
