@@ -107,32 +107,35 @@ func (l ledger) Read() error {
 			return nil
 		}
 		fmt.Printf("%s:%d: \"%s\"\n", line.Filename, line.LineNum, line.Text)
-		if strings.HasPrefix(line.Text, "include ") {
-			pieces := strings.Split(line.Text, " ")
-			if len(pieces) >= 2 {
-				err := s.NewFile(pieces[1])
-				if err != nil {
-					panic(err)
-				}
-			}
+		text := line.Text
+		var comment string
+		indented := false
+		if len(text) > 0 && (text[0] == ' ' || text[0] == '\t') {
+			indented = true
 		}
-	}
-}
-
-func ReadFile(filename string) {
-	s := NewScanner()
-	s.NewFile(filename)
-	for {
-		line := s.Line()
-		if line.Err != nil {
-			if line.Err != io.EOF {
-				panic(line.Err)
-			}
-			break
+		text = strings.TrimSpace(text)
+		if len(text) == 0 {
+			fmt.Printf("%s:%d: empty line\n", line.Filename, line.LineNum)
+			continue
 		}
-		fmt.Printf("%s:%d: \"%s\"\n", line.Filename, line.LineNum, line.Text)
-		if strings.HasPrefix(line.Text, "include ") {
-			pieces := strings.Split(line.Text, " ")
+		if text[0] == '*' || text[0] == '#' || text[0] == ';' {
+			comment = text[1:]
+			fmt.Printf("%s:%d: File comment: \"%s\"\n", line.Filename, line.LineNum, comment)
+			continue
+		}
+		if i := strings.IndexByte(text, ';'); i >= 0 {
+			comment = text[i+1:]
+			text = text[0:i]
+		}
+		pieces := strings.Fields(text)
+		if len(pieces) == 0 {
+			panic("len(pieces)==0 (cannot happen)")
+		}
+		if indented {
+			fmt.Printf("%s:%d: indented line (unimplemented)\n", line.Filename, line.LineNum)
+			continue
+		}
+		if pieces[0] == "include" {
 			if len(pieces) >= 2 {
 				err := s.NewFile(pieces[1])
 				if err != nil {

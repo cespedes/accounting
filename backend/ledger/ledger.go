@@ -6,7 +6,11 @@ import (
 	"github.com/cespedes/accounting"
 )
 
-type ledgerDriver struct{}
+type LedgerDriver struct{}
+
+func init() {
+	accounting.Register("ledger", LedgerDriver{})
+}
 
 type ledger struct {
 	file         string
@@ -16,7 +20,7 @@ type ledger struct {
 	prices       []accounting.Price
 }
 
-func (ledgerDriver) Open(name string) (accounting.Conn, error) {
+func (LedgerDriver) Open(name string) (accounting.Conn, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -27,6 +31,7 @@ func (ledgerDriver) Open(name string) (accounting.Conn, error) {
 }
 
 func (l *ledger) Accounts() (accounts []*accounting.Account) {
+	l.Read()
 	return nil
 }
 
@@ -36,8 +41,4 @@ func (l *ledger) Transactions() (transactions []accounting.Transaction) {
 
 func (l *ledger) Close() error {
 	return nil
-}
-
-func init() {
-	accounting.Register("ledger", ledgerDriver{})
 }
