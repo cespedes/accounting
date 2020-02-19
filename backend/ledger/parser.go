@@ -205,35 +205,90 @@ func (l *ledger) Read() error {
 		if !indented && lastLine == lineSplit {
 			l.balanceLastTransaction(line)
 		}
-		if !indented && strings.HasPrefix(text, "include ") {
+		word, rest := firstWord(text)
+		if !indented && word == "include" {
 			lastLine = lineInclude
-			newFile := strings.TrimSpace(text[8:])
+			newFile := rest
 			err := s.NewFile(newFile)
 			if err != nil {
 				log.Printf("%s:%d: couldn't include file: %s\n", line.Filename, line.LineNum, err.Error())
 			}
 			continue
 		}
-		if !indented && len(text) > 11 && text[10] == ' ' && getDate(text[0:10]) != nil {
-			var transaction accounting.Transaction
-			transaction.Time = *getDate(text[0:10])
-			transaction.Description = strings.TrimSpace(text[10:])
-			transaction.Comment = comment
-			l.transactions = append(l.transactions, transaction)
-			lastLine = lineTransaction
+		if !indented {
+			date, err := getDate(word)
+			if err == nil {
+				var transaction accounting.Transaction
+				transaction.Time = date
+				transaction.Description = rest
+				transaction.Comment = comment
+				l.transactions = append(l.transactions, transaction)
+				lastLine = lineTransaction
+				continue
+			}
+		}
+		if !indented && word == "P" {
+			var price accounting.Price
+			var err error
+			// set price
+			date, rest := firstWord(rest)
+			price.Time, err = getDate(date)
+			if err != nil {
+				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
+				continue
+			}
+			currency, rest := firstWord(rest)
+			price.Currency = l.getCurrency(currency)
+			price.Value, err = l.getValue(rest)
+			if err != nil {
+				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
+				continue
+			}
+			l.prices = append(l.prices, price)
 			continue
 		}
 		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
 	}
 }
 
-func getDate(s string) *time.Time {
+func (l *ledger) getCurrency(s string) *accounting.Currency {
+	for i := range l.currencies {
+		if s == l.currencies[i].Name {
+			return l.currencies[i]
+		}
+	}
+	var currency accounting.Currency
+	currency.Name = s
+	l.currencies = append(l.currencies, &currency)
+	return &currency
+}
+
+func (l *ledger) getValue(s string) (accounting.Value, error) {
+	// TODO FIXME XXX
+	return accounting.Value{}, nil
+}
+
+func firstWord(s string) (string, string) {
+	i := strings.IndexByte(s, ' ')
+	if i > 0 {
+		return s[:i], strings.TrimSpace(s[i+1:])
+	}
+	return s, ""
+}
+
+func getDate(s string) (time.Time, error) {
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+	s = strings.ReplaceAll(s, ":", "-")
 	d, e := time.Parse("2006-01-02", s)
 	if e != nil {
-		d, e = time.Parse("2006/01/02", s)
+		d, e = time.Parse("2006-01-02-15-04-05", s)
 	}
 	if e != nil {
-		return nil
+		d, e = time.Parse("2006-01-02-15-04", s)
 	}
-	return &d
+	if e != nil {
+		d, e = time.Parse("2006-01-02-15", s)
+	}
+	return d, e
 }

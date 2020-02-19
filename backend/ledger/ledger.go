@@ -14,9 +14,9 @@ func init() {
 
 type ledger struct {
 	file         string
-	accounts     []accounting.Account
+	accounts     []*accounting.Account
 	transactions []accounting.Transaction
-	currencies   []accounting.Currency
+	currencies   []*accounting.Currency
 	prices       []accounting.Price
 }
 
