@@ -16,6 +16,7 @@ type Currency struct {
 	Thousand    string // What to use (if any) every 3 digits
 	Decimal     string // decimal separator ("." if empty)
 	Precision   int    // Number of decimal places to show
+	Comment     string
 }
 
 // Value specifies an amount and its currency
@@ -40,6 +41,7 @@ type Account struct {
 type Split struct {
 	Account *Account   // Origin or destination of funds
 	Value   Value      // Amount to be transferred
+	EqValue *Value     // Price of this value, in another currency
 	Balance Balance    // Balance of this account, after this movement
 	Time    *time.Time // if nil, it inherits the transactions' time
 	Comment string     // Split comment (if any)

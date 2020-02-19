@@ -4,8 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/cespedes/accounting"
 )
 
 /* Syntax of ledger files using EBNF:
@@ -93,11 +97,65 @@ func (s *Scanner) Line() ScannerLine {
 	return line
 }
 
+const (
+	lineNone = iota
+	lineAccount
+	lineCommodity
+	linePrice
+	lineTransaction
+	lineSplit
+	lineInclude
+)
+
+func addComment(old *string, new string) {
+	if *old == "" {
+		*old = new
+	} else {
+		*old += "\n" + new
+	}
+}
+
+func (l *ledger) balanceLastTransaction(line ScannerLine) {
+	var unbalancedSplit *accounting.Split
+	balance := make(map[*accounting.Currency]int64)
+	transaction := l.transactions[len(l.transactions)-1]
+	for _, s := range transaction.Splits {
+		if s.Value.Currency == nil {
+			if unbalancedSplit != nil {
+				log.Fatalf("%s:%d: more than one posting without amount", line.Filename, line.LineNum)
+			}
+			unbalancedSplit = &s
+			continue
+		}
+		if s.EqValue != nil {
+			balance[s.EqValue.Currency] += s.EqValue.Amount
+		} else {
+			balance[s.Value.Currency] += s.Value.Amount
+		}
+	}
+	for c, a := range balance {
+		if a == 0 {
+			delete(balance, c)
+		} else {
+			if unbalancedSplit == nil {
+				log.Fatalf("%s:%d: could not balance transaction", line.Filename, line.LineNum)
+			}
+			unbalancedSplit.Value.Currency = c
+			unbalancedSplit.Value.Amount = -a
+			unbalancedSplit = nil
+		}
+	}
+	if unbalancedSplit != nil {
+		log.Fatalf("%s:%d: could not balance transaction", line.Filename, line.LineNum)
+	}
+}
+
 // ReadFile fills a ledger with the data from a journal file.
-func (l ledger) Read() error {
+func (l *ledger) Read() error {
 	s := NewScanner()
 	s.NewFile(l.file)
 
+	lastLine := lineNone
 	for {
 		line := s.Line()
 		if line.Err != nil {
@@ -106,42 +164,76 @@ func (l ledger) Read() error {
 			}
 			return nil
 		}
-		fmt.Printf("%s:%d: \"%s\"\n", line.Filename, line.LineNum, line.Text)
+		// fmt.Printf("%s:%d: \"%s\"\n", line.Filename, line.LineNum, line.Text)
 		text := line.Text
-		var comment string
+		comment := ""
 		indented := false
 		if len(text) > 0 && (text[0] == ' ' || text[0] == '\t') {
 			indented = true
 		}
 		text = strings.TrimSpace(text)
 		if len(text) == 0 {
-			fmt.Printf("%s:%d: empty line\n", line.Filename, line.LineNum)
+			// empty line
 			continue
 		}
 		if text[0] == '*' || text[0] == '#' || text[0] == ';' {
-			comment = text[1:]
-			fmt.Printf("%s:%d: File comment: \"%s\"\n", line.Filename, line.LineNum, comment)
+			comment = strings.TrimSpace(text[1:])
+			if !indented {
+				fmt.Printf("%s:%d: File comment: \"%s\"\n", line.Filename, line.LineNum, comment)
+			} else {
+				switch lastLine {
+				case lineAccount:
+					addComment(&l.accounts[len(l.accounts)-1].Comment, comment)
+				case lineCommodity:
+					addComment(&l.currencies[len(l.currencies)-1].Comment, comment)
+				case linePrice:
+					addComment(&l.prices[len(l.prices)-1].Comment, comment)
+				case lineTransaction:
+					addComment(&l.transactions[len(l.transactions)-1].Comment, comment)
+				case lineSplit:
+					addComment(&l.transactions[len(l.transactions)-1].Splits[len(l.transactions[len(l.transactions)-1].Splits)].Comment, comment)
+				default:
+					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
+				}
+			}
 			continue
 		}
 		if i := strings.IndexByte(text, ';'); i >= 0 {
-			comment = text[i+1:]
-			text = text[0:i]
+			comment = strings.TrimSpace(text[i+1:])
+			text = strings.TrimSpace(text[0:i])
 		}
-		pieces := strings.Fields(text)
-		if len(pieces) == 0 {
-			panic("len(pieces)==0 (cannot happen)")
+		if !indented && lastLine == lineSplit {
+			l.balanceLastTransaction(line)
 		}
-		if indented {
-			fmt.Printf("%s:%d: indented line (unimplemented)\n", line.Filename, line.LineNum)
+		if !indented && strings.HasPrefix(text, "include ") {
+			lastLine = lineInclude
+			newFile := strings.TrimSpace(text[8:])
+			err := s.NewFile(newFile)
+			if err != nil {
+				log.Printf("%s:%d: couldn't include file: %s\n", line.Filename, line.LineNum, err.Error())
+			}
 			continue
 		}
-		if pieces[0] == "include" {
-			if len(pieces) >= 2 {
-				err := s.NewFile(pieces[1])
-				if err != nil {
-					panic(err)
-				}
-			}
+		if !indented && len(text) > 11 && text[10] == ' ' && getDate(text[0:10]) != nil {
+			var transaction accounting.Transaction
+			transaction.Time = *getDate(text[0:10])
+			transaction.Description = strings.TrimSpace(text[10:])
+			transaction.Comment = comment
+			l.transactions = append(l.transactions, transaction)
+			lastLine = lineTransaction
+			continue
 		}
+		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
 	}
+}
+
+func getDate(s string) *time.Time {
+	d, e := time.Parse("2006-01-02", s)
+	if e != nil {
+		d, e = time.Parse("2006/01/02", s)
+	}
+	if e != nil {
+		return nil
+	}
+	return &d
 }

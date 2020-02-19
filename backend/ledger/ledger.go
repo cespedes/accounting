@@ -6,21 +6,21 @@ import (
 	"github.com/cespedes/accounting"
 )
 
-type LedgerDriver struct{}
+type Driver struct{}
 
 func init() {
-	accounting.Register("ledger", LedgerDriver{})
+	accounting.Register("ledger", Driver{})
 }
 
 type ledger struct {
 	file         string
-	accounts     []*accounting.Account
-	transactions []*accounting.Transaction
+	accounts     []accounting.Account
+	transactions []accounting.Transaction
 	currencies   []accounting.Currency
 	prices       []accounting.Price
 }
 
-func (LedgerDriver) Open(name string) (accounting.Conn, error) {
+func (Driver) Open(name string) (accounting.Conn, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -31,12 +31,12 @@ func (LedgerDriver) Open(name string) (accounting.Conn, error) {
 }
 
 func (l *ledger) Accounts() (accounts []*accounting.Account) {
-	l.Read()
 	return nil
 }
 
 func (l *ledger) Transactions() (transactions []accounting.Transaction) {
-	return nil
+	l.Read()
+	return l.transactions
 }
 
 func (l *ledger) Close() error {

@@ -44,6 +44,27 @@ func TestCurrencyString(t *testing.T) {
 		t.Errorf("Money(1) = %q", got)
 	}
 
+	v.Amount = -1.2345 * U
+	v.Currency.Precision = 0
+	v.Currency.Decimal = "'"
+	if got := v.String(); got != "-1" {
+		t.Errorf("Money(-1) = %q", got)
+	}
+
+	v.Amount = 1.999 * U
+	v.Currency.Precision = 0
+	v.Currency.Decimal = "'"
+	if got := v.String(); got != "1" {
+		t.Errorf("Money(1) = %q", got)
+	}
+
+	v.Amount = -1.999 * U
+	v.Currency.Precision = 0
+	v.Currency.Decimal = "'"
+	if got := v.String(); got != "-1" {
+		t.Errorf("Money(-1) = %q", got)
+	}
+
 	v.Amount = 1.2345 * U
 	v.Currency.Precision = 2
 	v.Currency.Decimal = ","
