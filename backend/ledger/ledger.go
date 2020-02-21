@@ -39,6 +39,10 @@ func (l *ledger) Transactions() (transactions []accounting.Transaction) {
 	return l.transactions
 }
 
+func (l *ledger) Prices() []accounting.Price {
+	return l.prices
+}
+
 func (l *ledger) Close() error {
 	return nil
 }

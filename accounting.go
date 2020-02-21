@@ -146,6 +146,17 @@ func (l *Ledger) Transactions() []Transaction {
 	return l.driver.Transactions()
 }
 
+// Prices returns the list of prices.
+func (l *Ledger) Prices() []Price {
+	x, ok := l.driver.(interface {
+		Prices() []Price
+	})
+	if ok {
+		return x.Prices()
+	}
+	return nil
+}
+
 // Account returns details for one account, given its id.
 func (l *Ledger) Account(id int) *Account {
 	x, ok := l.driver.(interface {

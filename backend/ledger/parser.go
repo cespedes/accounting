@@ -20,8 +20,8 @@ directive = ( include_line | account_line | price_line | default_currency_line |
 letter = unicode_letter .
 digit  = "0" … "9" .
 digits = digit { digit } .
-punct = "." | "," | " " | "_" .
-currency_char = letter | digit | "$" | "/" | "_" | "." .
+punct = "." | "," | " " | "_" | "'" .
+currency_char = letter | digit | "$" | "/" | "_" | "-" | "." .
 currency = currency_char { currency_char } .
 integer = ( digit { digit} ) | ( digit [ digit [ digit ] ] { punct digit digit digit } ) .
 number = [ "-" ] integer [ punct digit { digit } ]
@@ -240,11 +240,13 @@ func (l *ledger) Read() error {
 			currency, rest := firstWord(rest)
 			price.Currency = l.getCurrency(currency)
 			price.Value, err = l.getValue(rest)
+			price.Comment = comment
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
 			l.prices = append(l.prices, price)
+			lastLine = linePrice
 			continue
 		}
 		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
@@ -263,7 +265,14 @@ func (l *ledger) getCurrency(s string) *accounting.Currency {
 	return &currency
 }
 
+func getAmount(s string) (int64, string) {
+	return 0, ""
+}
+
 func (l *ledger) getValue(s string) (accounting.Value, error) {
+	if s[0] == '-' || (s[0] >= '0' && s[0] <= '9') {
+		// a, rest := getAmount(s)
+	}
 	// TODO FIXME XXX
 	return accounting.Value{}, nil
 }
