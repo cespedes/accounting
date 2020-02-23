@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,13 +21,13 @@ directive = ( include_line | account_line | price_line | default_currency_line |
 letter = unicode_letter .
 digit  = "0" … "9" .
 digits = digit { digit } .
-punct = "." | "," | " " | "_" | "'" .
+punct = "." | "," | "_" | "'" .
 currency_char = letter | digit | "$" | "/" | "_" | "-" | "." .
 currency = currency_char { currency_char } .
 integer = ( digit { digit} ) | ( digit [ digit [ digit ] ] { punct digit digit digit } ) .
 number = [ "-" ] integer [ punct digit { digit } ]
 value = ( currency number ) | ( currency " " number ) | ( number currency ) | (number " " currency ) .
-date = digit digit digit digit ( "-" | "/" ) digit digit ( "-" | "/" ) digit digit
+date = digit digit digit digit ( "-" | "/" | "." ) digit digit ( "-" | "/" | "." ) digit digit
 indent = " " { " " }
 transaction_price = ( "@" | "@@" ) value .
 balance_assertion = ( "=" | "=*" | "==" | "==*" ) value [ transaction_price ] .
@@ -269,12 +270,91 @@ func getAmount(s string) (int64, string) {
 	return 0, ""
 }
 
-func (l *ledger) getValue(s string) (accounting.Value, error) {
+func getAmountAndCurrency(s string) (amount string, currency string) {
 	if s[0] == '-' || (s[0] >= '0' && s[0] <= '9') {
-		// a, rest := getAmount(s)
+		// amount first, currency after
+		for i, c := range s {
+			if !strings.ContainsRune("-0123456789.,_'", c) {
+				amount = s[:i]
+				currency = strings.TrimSpace(s[i:])
+				return
+			}
+		}
+		return s, ""
 	}
+	for i := len(s) - 1; i >= 0; i-- {
+		if !strings.ContainsRune("-0123456789.,_", rune(s[i])) {
+			amount = s[i+1:]
+			currency = s[0 : i+1]
+			return
+		}
+	}
+	// shouldn't happen:
+	panic("getAmountAndCurrency: failed assertion")
+}
+
+func (l *ledger) addCurrency(amount, currency string) *accounting.Currency {
 	// TODO FIXME XXX
-	return accounting.Value{}, nil
+	// possible punctuation marks: . , _ '
+
+	return nil
+}
+
+func (l *ledger) getValue(s string) (accounting.Value, error) {
+	var value accounting.Value
+	sAmount, sCurrency := getAmountAndCurrency(s)
+	if len(sAmount) == 0 {
+		return value, errors.New("syntax error: no amount")
+	}
+	if sCurrency == "" {
+		value.Currency = l.defaultCurrency
+	} else {
+		for _, c := range l.currencies {
+			if c.Name == sCurrency {
+				value.Currency = c
+				break
+			}
+		}
+		if value.Currency == nil {
+			value.Currency = l.addCurrency(sAmount, sCurrency)
+		}
+	}
+	var sign int64 = 1
+	if sAmount[0] == '-' {
+		sign = -1
+		sAmount = sAmount[1:]
+	}
+	var decimalFactor int64
+	for i, c := range sAmount {
+		if c >= '0' && c <= '9' {
+			value.Amount *= 10
+			value.Amount += int64(c - '0')
+			decimalFactor *= 10
+			continue
+		}
+		if value.Currency != nil && value.Currency.Thousand == sAmount[i:i+1] {
+			continue
+		}
+		if value.Currency == nil || value.Currency.Decimal == sAmount[i:i+1] {
+			if decimalFactor > 0 {
+				return value, fmt.Errorf("syntax error: too many decimal points '%c' in number", c)
+			}
+			decimalFactor = 1
+			continue
+		}
+		if value.Currency != nil {
+			return value, fmt.Errorf("syntax error: wrong char '%c' in number", c)
+		}
+	}
+	if decimalFactor > 100_000_000 {
+		return value, errors.New("too many decimal positions")
+	}
+	for decimalFactor < 100_000_000 {
+		value.Amount *= 10
+		decimalFactor *= 10
+	}
+	value.Amount *= sign
+	return value, nil
 }
 
 func firstWord(s string) (string, string) {

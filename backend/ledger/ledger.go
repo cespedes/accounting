@@ -13,11 +13,12 @@ func init() {
 }
 
 type ledger struct {
-	file         string
-	accounts     []*accounting.Account
-	transactions []accounting.Transaction
-	currencies   []*accounting.Currency
-	prices       []accounting.Price
+	file            string
+	accounts        []*accounting.Account
+	transactions    []accounting.Transaction
+	currencies      []*accounting.Currency
+	prices          []accounting.Price
+	defaultCurrency *accounting.Currency
 }
 
 func (Driver) Open(name string) (accounting.Conn, error) {
