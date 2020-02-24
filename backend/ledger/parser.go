@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cespedes/accounting"
 )
@@ -266,59 +267,58 @@ func (l *ledger) getCurrency(s string) *accounting.Currency {
 	return &currency
 }
 
-func getAmount(s string) (int64, string) {
-	return 0, ""
-}
+func (l *ledger) getValue(s string) (accounting.Value, error) {
+	var value accounting.Value
+	value.Currency = new(accounting.Currency)
+	var sAmount string
 
-func getAmountAndCurrency(s string) (amount string, currency string) {
 	if s[0] == '-' || (s[0] >= '0' && s[0] <= '9') {
 		// amount first, currency after
 		for i, c := range s {
 			if !strings.ContainsRune("-0123456789.,_'", c) {
-				amount = s[:i]
-				currency = strings.TrimSpace(s[i:])
-				return
+				sAmount = s[:i]
+				if unicode.IsSpace(c) {
+					value.Currency.PrintSpace = true
+				}
+				value.Currency.Name = strings.TrimSpace(s[i:])
+				goto done
 			}
 		}
-		return s, ""
-	}
-	for i := len(s) - 1; i >= 0; i-- {
-		if !strings.ContainsRune("-0123456789.,_", rune(s[i])) {
-			amount = s[i+1:]
-			currency = s[0 : i+1]
-			return
+	} else {
+		value.Currency.PrintBefore = true
+		for i := len(s) - 1; i >= 0; i-- {
+			if !strings.ContainsRune("-0123456789.,_", rune(s[i])) {
+				if unicode.IsSpace(rune(s[i])) {
+					value.Currency.PrintSpace = true
+				}
+				sAmount = s[i+1:]
+				value.Currency.Name = strings.TrimSpace(s[0 : i+1])
+				goto done
+			}
 		}
+		return value, errors.New("syntax error: currency without amount")
 	}
-	// shouldn't happen:
-	panic("getAmountAndCurrency: failed assertion")
-}
-
-func (l *ledger) addCurrency(amount, currency string) *accounting.Currency {
-	// TODO FIXME XXX
-	// possible punctuation marks: . , _ '
-
-	return nil
-}
-
-func (l *ledger) getValue(s string) (accounting.Value, error) {
-	var value accounting.Value
-	sAmount, sCurrency := getAmountAndCurrency(s)
-	if len(sAmount) == 0 {
-		return value, errors.New("syntax error: no amount")
-	}
-	if sCurrency == "" {
-		value.Currency = l.defaultCurrency
+done:
+	newCurrency := true
+	if value.Currency.Name == "" {
+		if l.defaultCurrency == nil {
+			l.defaultCurrency = value.Currency
+		} else {
+			value.Currency = l.defaultCurrency
+			newCurrency = false
+		}
 	} else {
 		for _, c := range l.currencies {
-			if c.Name == sCurrency {
+			if c.Name == value.Currency.Name {
 				value.Currency = c
-				break
+				newCurrency = false
+				goto done2
 			}
 		}
-		if value.Currency == nil {
-			value.Currency = l.addCurrency(sAmount, sCurrency)
-		}
+		l.currencies = append(l.currencies, value.Currency)
 	}
+done2:
+	_ = newCurrency // FIXME TODO XXX
 	var sign int64 = 1
 	if sAmount[0] == '-' {
 		sign = -1
