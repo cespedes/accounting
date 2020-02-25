@@ -272,10 +272,13 @@ func (l *ledger) getValue(s string) (accounting.Value, error) {
 	value.Currency = new(accounting.Currency)
 	var sAmount string
 
+	if s == "" {
+		return value, errors.New("empty value")
+	}
 	if s[0] == '-' || (s[0] >= '0' && s[0] <= '9') {
-		// amount first, currency after
+		// first amount, then currency
 		for i, c := range s {
-			if !strings.ContainsRune("-0123456789.,_'", c) {
+			if !strings.ContainsRune("-+0123456789.,_'", c) {
 				sAmount = s[:i]
 				if unicode.IsSpace(c) {
 					value.Currency.PrintSpace = true
@@ -284,19 +287,23 @@ func (l *ledger) getValue(s string) (accounting.Value, error) {
 				goto done
 			}
 		}
+		sAmount = s
 	} else {
+		// first currency, then amount
 		value.Currency.PrintBefore = true
 		for i := len(s) - 1; i >= 0; i-- {
-			if !strings.ContainsRune("-0123456789.,_", rune(s[i])) {
+			if !strings.ContainsRune("-+0123456789.,_", rune(s[i])) {
 				if unicode.IsSpace(rune(s[i])) {
 					value.Currency.PrintSpace = true
 				}
 				sAmount = s[i+1:]
 				value.Currency.Name = strings.TrimSpace(s[0 : i+1])
-				goto done
+				break
 			}
 		}
-		return value, errors.New("syntax error: currency without amount")
+		if sAmount == "" {
+			return value, errors.New("syntax error: currency without amount")
+		}
 	}
 done:
 	newCurrency := true
@@ -318,40 +325,98 @@ done:
 		l.currencies = append(l.currencies, value.Currency)
 	}
 done2:
-	_ = newCurrency // FIXME TODO XXX
 	var sign int64 = 1
 	if sAmount[0] == '-' {
 		sign = -1
 		sAmount = sAmount[1:]
+	} else if sAmount[0] == '+' {
+		sAmount = sAmount[1:]
 	}
-	var decimalFactor int64
+	var punct string
+	punctPos, thousandPos, decimalPos := -1, -1, -1
+	if c := sAmount[len(sAmount)-1]; c < '0' || c > '9' {
+		return value, errors.New("syntax error: amount must end with a digit")
+	}
 	for i, c := range sAmount {
 		if c >= '0' && c <= '9' {
 			value.Amount *= 10
 			value.Amount += int64(c - '0')
-			decimalFactor *= 10
 			continue
 		}
-		if value.Currency != nil && value.Currency.Thousand == sAmount[i:i+1] {
-			continue
+		if i == 0 {
+			return value, fmt.Errorf("syntax error: wrong position for punctuation mark '%c'", c)
 		}
-		if value.Currency == nil || value.Currency.Decimal == sAmount[i:i+1] {
-			if decimalFactor > 0 {
-				return value, fmt.Errorf("syntax error: too many decimal points '%c' in number", c)
+		if c == '-' || c == '+' {
+			return value, fmt.Errorf("syntax error: wrong punctuation mark '%c'", c)
+		}
+		if punct == string(c) {
+			// we have seen this before: this must be a thousand sign
+			value.Currency.Thousand = punct
+			thousandPos = punctPos
+			punct, punctPos = "", -1
+		}
+		if value.Currency.Thousand == string(c) || (value.Currency.Thousand == "" && value.Currency.Decimal != "" && value.Currency.Decimal != string(c)) {
+			value.Currency.Thousand = string(c)
+			if (thousandPos == -1 && i > 3) || i-thousandPos != 4 || decimalPos > -1 {
+				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand)
 			}
-			decimalFactor = 1
+			thousandPos = i
 			continue
 		}
-		if value.Currency != nil {
-			return value, fmt.Errorf("syntax error: wrong char '%c' in number", c)
+		if punct != "" && punct != string(c) {
+			// last one must be a thousand sign, and this one a decimal sign
+			value.Currency.Thousand = punct
+			value.Currency.Decimal = string(c)
+			thousandPos = punctPos
+			punct, punctPos = "", -1
+		}
+		if value.Currency.Decimal == string(c) || (value.Currency.Decimal == "" && value.Currency.Thousand != "" && value.Currency.Thousand != string(c)) {
+			value.Currency.Decimal = string(c)
+			if decimalPos > -1 {
+				return value, fmt.Errorf("syntax error: more than one decimal sign '%s'", value.Currency.Decimal)
+			}
+			if thousandPos > -1 && i-thousandPos != 4 {
+				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand)
+			}
+			decimalPos = i
+			continue
+		}
+		if value.Currency.Decimal != "" && value.Currency.Thousand != "" {
+			return value, fmt.Errorf("syntax error: unknown punctuacion '%c' (thousand='%s', decimal='%s')", c, value.Currency.Thousand, value.Currency.Decimal)
+		}
+		// TODO FIXME XXX
+		// 'c' could be a decimal sign or a thousand sign
+		if i > 3 {
+			value.Currency.Decimal = string(c)
+			decimalPos = i
+		} else {
+			punct = string(c)
+			punctPos = i
 		}
 	}
-	if decimalFactor > 100_000_000 {
-		return value, errors.New("too many decimal positions")
+	if punct != "" && len(sAmount)-punctPos != 4 {
+		value.Currency.Decimal = punct
+		decimalPos = punctPos
+		punct, punctPos = "", -1
 	}
-	for decimalFactor < 100_000_000 {
+	if punct != "" {
+		return value, fmt.Errorf("syntax error: punctuation '%s' can be a thousand or a decimal", punct)
+	}
+	shift := 0
+	if decimalPos == -1 {
+		shift = 8
+	} else {
+		shift = len(sAmount) - decimalPos - 1
+		if newCurrency {
+			value.Currency.Precision = shift
+		}
+		shift = 8 - shift
+	}
+	if shift < 0 || shift > 8 {
+		return value, fmt.Errorf("syntax error: too many decimal numbers")
+	}
+	for i := 0; i < shift; i++ {
 		value.Amount *= 10
-		decimalFactor *= 10
 	}
 	value.Amount *= sign
 	return value, nil
