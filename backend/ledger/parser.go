@@ -117,16 +117,27 @@ func addComment(old *string, new string) {
 	}
 }
 
-func (l *ledger) balanceLastTransaction(line ScannerLine) {
+func printTransaction(t accounting.Transaction) {
+	var comment string
+	if t.Comment != "" {
+		comment = " /* " + t.Comment + " */"
+	}
+	fmt.Printf("%s %s%s\n", t.Time.Format("2006-01-02"), t.Description, comment)
+	for _, s := range t.Splits {
+		fmt.Printf(" > %-50s %s\n", s.Account.Name, s.Value.String())
+	}
+}
+
+func (l *ledger) balanceLastTransaction(file string, line int) {
 	var unbalancedSplit *accounting.Split
 	balance := make(map[*accounting.Currency]int64)
-	transaction := l.transactions[len(l.transactions)-1]
-	for _, s := range transaction.Splits {
+	transaction := &l.transactions[len(l.transactions)-1]
+	for i, s := range transaction.Splits {
 		if s.Value.Currency == nil {
 			if unbalancedSplit != nil {
-				log.Fatalf("%s:%d: more than one posting without amount", line.Filename, line.LineNum)
+				log.Fatalf("%s:%d: more than one posting without amount", file, line)
 			}
-			unbalancedSplit = &s
+			unbalancedSplit = &transaction.Splits[i]
 			continue
 		}
 		if s.EqValue != nil {
@@ -136,11 +147,9 @@ func (l *ledger) balanceLastTransaction(line ScannerLine) {
 		}
 	}
 	for c, a := range balance {
-		if a == 0 {
-			delete(balance, c)
-		} else {
+		if a != 0 {
 			if unbalancedSplit == nil {
-				log.Fatalf("%s:%d: could not balance transaction", line.Filename, line.LineNum)
+				log.Fatalf("%s:%d: could not balance transaction", file, line)
 			}
 			unbalancedSplit.Value.Currency = c
 			unbalancedSplit.Value.Amount = -a
@@ -148,7 +157,7 @@ func (l *ledger) balanceLastTransaction(line ScannerLine) {
 		}
 	}
 	if unbalancedSplit != nil {
-		log.Fatalf("%s:%d: could not balance transaction", line.Filename, line.LineNum)
+		log.Fatalf("%s:%d: could not balance transaction", file, line)
 	}
 }
 
@@ -158,13 +167,15 @@ func (l *ledger) Read() error {
 	s.NewFile(l.file)
 
 	lastLine := lineNone
+	var lastTransactionFile string
+	var lastTransactionLine int
 	for {
 		line := s.Line()
 		if line.Err != nil {
 			if line.Err != io.EOF {
 				return line.Err
 			}
-			return nil
+			break
 		}
 		// fmt.Printf("%s:%d: \"%s\"\n", line.Filename, line.LineNum, line.Text)
 		text := line.Text
@@ -205,7 +216,7 @@ func (l *ledger) Read() error {
 			text = strings.TrimSpace(text[0:i])
 		}
 		if !indented && lastLine == lineSplit {
-			l.balanceLastTransaction(line)
+			l.balanceLastTransaction(lastTransactionFile, lastTransactionLine)
 		}
 		word, rest := firstWord(text)
 		if !indented && word == "include" {
@@ -226,6 +237,8 @@ func (l *ledger) Read() error {
 				transaction.Comment = comment
 				l.transactions = append(l.transactions, transaction)
 				lastLine = lineTransaction
+				lastTransactionFile = line.Filename
+				lastTransactionLine = line.LineNum
 				continue
 			}
 		}
@@ -251,8 +264,44 @@ func (l *ledger) Read() error {
 			lastLine = linePrice
 			continue
 		}
+		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {
+			// split
+			t := &l.transactions[len(l.transactions)-1]
+			s := accounting.Split{}
+			i := strings.Index(text, "  ")
+			if i > 0 {
+				var err error
+				s.Account = l.getAccount(text[:i])
+				s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
+				if err != nil {
+					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+					continue
+				}
+			} else {
+				s.Account = l.getAccount(text)
+			}
+			t.Splits = append(t.Splits, s)
+			lastLine = lineSplit
+			continue
+		}
 		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
 	}
+	if lastLine == lineSplit {
+		l.balanceLastTransaction(lastTransactionFile, lastTransactionLine)
+	}
+	return nil
+}
+
+func (l *ledger) getAccount(s string) *accounting.Account {
+	for i := range l.accounts {
+		if s == l.accounts[i].Name {
+			return l.accounts[i]
+		}
+	}
+	var account accounting.Account
+	account.Name = s
+	l.accounts = append(l.accounts, &account)
+	return &account
 }
 
 func (l *ledger) getCurrency(s string) *accounting.Currency {
@@ -275,7 +324,7 @@ func (l *ledger) getValue(s string) (accounting.Value, error) {
 	if s == "" {
 		return value, errors.New("empty value")
 	}
-	if s[0] == '-' || (s[0] >= '0' && s[0] <= '9') {
+	if s[0] == '-' || s[0] == '+' || (s[0] >= '0' && s[0] <= '9') {
 		// first amount, then currency
 		for i, c := range s {
 			if !strings.ContainsRune("-+0123456789.,_'", c) {
