@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -147,18 +148,67 @@ func (l *ledger) balanceLastTransaction(file string, line int) {
 		}
 	}
 	for c, a := range balance {
-		if a != 0 {
-			if unbalancedSplit == nil {
-				log.Fatalf("%s:%d: could not balance transaction", file, line)
-			}
-			unbalancedSplit.Value.Currency = c
-			unbalancedSplit.Value.Amount = -a
-			unbalancedSplit = nil
+		if a == 0 {
+			delete(balance, c)
 		}
 	}
-	if unbalancedSplit != nil {
-		log.Fatalf("%s:%d: could not balance transaction", file, line)
+	if len(balance) == 0 {
+		// everything is balanced
+		return
 	}
+	if unbalancedSplit != nil && len(balance) == 1 {
+		for c, a := range balance {
+			unbalancedSplit.Value.Currency = c
+			unbalancedSplit.Value.Amount = -a
+			return
+		}
+		panic("balanceLastTransaction(): assertion failed")
+	}
+	if unbalancedSplit != nil {
+		log.Fatalf("%s:%d: could not balance account %q: two or more currencies in transaction", file, line, unbalancedSplit.Account.FullName())
+	}
+	if len(balance) == 1 {
+		var v accounting.Value
+		for c, a := range balance {
+			v.Amount = a
+			v.Currency = c
+		}
+		log.Fatalf("%s:%d: could not balance transaction: total amount is %s", file, line, v.String())
+	}
+	if len(balance) == 2 {
+		var values []accounting.Value
+		for c, a := range balance {
+			var value accounting.Value
+			value.Amount = a
+			value.Currency = c
+			values = append(values, value)
+		}
+		// we add 2 automatic prices, converting one currency to another and vice-versa
+		var price accounting.Price
+		var i *big.Int
+		price.Time = transaction.Time
+		price.Comment = `automatic`
+		price.Currency = values[0].Currency
+		i = big.NewInt(-accounting.U)
+		i.Mul(i, big.NewInt(values[1].Amount))
+		i.Quo(i, big.NewInt(values[0].Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = values[1].Currency
+		l.prices = append(l.prices, price)
+		price.Currency = values[1].Currency
+		i = big.NewInt(-accounting.U)
+		i.Mul(i, big.NewInt(values[0].Amount))
+		i.Quo(i, big.NewInt(values[1].Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = values[0].Currency
+		l.prices = append(l.prices, price)
+		return
+	}
+	if len(balance) > 2 {
+		log.Fatalf("%s:%d: not able to balance transactions with 3 or more currencies", file, line)
+	}
+	log.Printf("%s:%d", file, line)
+	panic("balanceLastTransaction(): unreachable code")
 }
 
 // ReadFile fills a ledger with the data from a journal file.
@@ -204,7 +254,7 @@ func (l *ledger) Read() error {
 				case lineTransaction:
 					addComment(&l.transactions[len(l.transactions)-1].Comment, comment)
 				case lineSplit:
-					addComment(&l.transactions[len(l.transactions)-1].Splits[len(l.transactions[len(l.transactions)-1].Splits)].Comment, comment)
+					addComment(&l.transactions[len(l.transactions)-1].Splits[len(l.transactions[len(l.transactions)-1].Splits)-1].Comment, comment)
 				default:
 					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 				}
@@ -272,10 +322,42 @@ func (l *ledger) Read() error {
 			if i > 0 {
 				var err error
 				s.Account = l.getAccount(text[:i])
-				s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
-				if err != nil {
-					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
-					continue
+				j := strings.Index(text[i:], "@")
+				if j > 0 {
+					s.Value, err = l.getValue(strings.TrimSpace(text[i : i+j]))
+					if err != nil {
+						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+						continue
+					}
+					if len(text[i:])-j < 2 {
+						log.Printf("%s:%d: syntax error (no value after '@')", line.Filename, line.LineNum)
+						continue
+					}
+					if text[i+j+1] == '@' {
+						s.EqValue = new(accounting.Value)
+						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+2:]))
+						if err != nil {
+							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+							continue
+						}
+					} else {
+						s.EqValue = new(accounting.Value)
+						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+1:]))
+						if err != nil {
+							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+							continue
+						}
+						k := big.NewInt(s.Value.Amount)
+						k.Mul(k, big.NewInt(s.EqValue.Amount))
+						k.Quo(k, big.NewInt(accounting.U))
+						s.EqValue.Amount = k.Int64()
+					}
+				} else {
+					s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
+					if err != nil {
+						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+						continue
+					}
 				}
 			} else {
 				s.Account = l.getAccount(text)

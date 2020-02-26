@@ -50,8 +50,8 @@ type Split struct {
 // Price declares a market price, which is an exchange rate between
 // two currencies on a certain date.
 type Price struct {
-	Currency *Currency
 	Time     time.Time
+	Currency *Currency
 	Value    Value
 	Comment  string
 }
