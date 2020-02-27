@@ -4,15 +4,29 @@ import (
 	"testing"
 )
 
-type testCase struct {
+type testValue struct {
 	input  string
 	output string
 	err    bool
 }
 
-var testCases [][]testCase = [][]testCase{
+var testValues [][]testValue = [][]testValue{
+	{
+		{"1.0.0", "", true},
+	},
+	{
+		{"100.000", "", true},
+	},
+	{
+		{"10.000", "", true},
+	},
+	{
+		{"1000.000", "1000.000", false},
+	},
 	{
 		{"1.000", "", true},
+	},
+	{
 		{"1.000.000", "1.000.000", false},
 		{"1eur", "1eur", false},
 		{"eur1", "1eur", false},
@@ -23,9 +37,9 @@ var testCases [][]testCase = [][]testCase{
 		{"1'000'000", "1'000'000", false},
 		{"234", "234", false},
 		{"1000", "1'000", false},
-		{"1000'000", "", true},
 		{"1.234'5  gbp", "1.234'5 gbp", false},
 		{"1 SP500", "1 SP500", false},
+		{"1000'000", "", true},
 	},
 	{
 		{"$1.23", "$1.23", false},
@@ -34,7 +48,7 @@ var testCases [][]testCase = [][]testCase{
 }
 
 func TestGetValue(t *testing.T) {
-	for _, cc := range testCases {
+	for _, cc := range testValues {
 		l := ledger{}
 		for _, c := range cc {
 			v, e := l.getValue(c.input)

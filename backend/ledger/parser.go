@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"path"
 	"strings"
 	"time"
 	"unicode"
@@ -69,6 +70,9 @@ func NewScanner() *Scanner {
 }
 
 func (s *Scanner) NewFile(filename string) error {
+	if len(filename) > 0 && filename[0] != '/' && len(s.files) > 0 {
+		filename = path.Join(path.Dir(s.files[len(s.files)-1].filename), filename)
+	}
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -94,6 +98,7 @@ func (s *Scanner) Line() ScannerLine {
 	}
 	line.Err = file.s.Err()
 	if line.Err == nil {
+		file.f.Close()
 		s.files = s.files[:len(s.files)-1]
 		return s.Line()
 	}
