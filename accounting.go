@@ -15,8 +15,9 @@ type Ledger struct {
 }
 
 var (
-	driversMu sync.RWMutex
-	drivers   = make(map[string]Driver)
+	driversMu      sync.RWMutex
+	drivers        = make(map[string]Driver)
+	defaultSchemes = []string{"ledger", "txtdb", "postgres"}
 )
 
 // Open opens a ledger specified by a URL-like string, where the scheme is the
@@ -30,6 +31,14 @@ func Open(dataSource string) (*Ledger, error) {
 	backend := url.Scheme
 	driversMu.RLock()
 	defer driversMu.RUnlock()
+	if backend == "" {
+		for _, b := range defaultSchemes {
+			if drivers[b] != nil {
+				backend = b
+				break
+			}
+		}
+	}
 	if drivers[backend] == nil {
 		return nil, errors.New("accounting.Open: Backend " + backend + " is not registered.")
 	}
