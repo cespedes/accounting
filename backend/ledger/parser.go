@@ -219,6 +219,11 @@ func (l *ledger) balanceLastTransaction(file string, line int) {
 
 // ReadFile fills a ledger with the data from a journal file.
 func (l *ledger) Read() error {
+	l.accounts = nil
+	l.transactions = nil
+	l.currencies = nil
+	l.prices = nil
+	l.defaultCurrency = nil
 	s := NewScanner()
 	s.NewFile(l.file)
 
@@ -291,6 +296,9 @@ func (l *ledger) Read() error {
 				transaction.Time = date
 				transaction.Description = rest
 				transaction.Comment = comment
+				if len(l.transactions) > 1 && l.transactions[len(l.transactions)-1].Time.After(date) {
+					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
+				}
 				l.transactions = append(l.transactions, transaction)
 				lastLine = lineTransaction
 				lastTransactionFile = line.Filename
@@ -407,6 +415,7 @@ func (l *ledger) getAccount(s string) *accounting.Account {
 	}
 	var account accounting.Account
 	account.Name = s
+	account.Balance = make(accounting.Balance)
 	l.accounts = append(l.accounts, &account)
 	return &account
 }
@@ -590,15 +599,17 @@ func getDate(s string) (time.Time, error) {
 	s = strings.ReplaceAll(s, "/", "-")
 	s = strings.ReplaceAll(s, "_", "-")
 	s = strings.ReplaceAll(s, ":", "-")
+	s = strings.ReplaceAll(s, ".", "-")
 	d, e := time.Parse("2006-01-02", s)
+	d = d.Add(12 * time.Hour)
 	if e != nil {
-		d, e = time.Parse("2006-01-02-15-04-05", s)
+		d, e = time.Parse("2006-01-02-15", s)
 	}
 	if e != nil {
 		d, e = time.Parse("2006-01-02-15-04", s)
 	}
 	if e != nil {
-		d, e = time.Parse("2006-01-02-15", s)
+		d, e = time.Parse("2006-01-02-15-04-05", s)
 	}
 	return d, e
 }

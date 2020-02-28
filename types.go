@@ -35,6 +35,7 @@ type Account struct {
 	Name    string   // Common name (ie, "Cash")
 	Code    string   // Optional: for example, account number
 	Comment string   // Optional
+	Balance Balance  // Final balance of this account
 }
 
 // Split is a deposit or withdrawal from an account.

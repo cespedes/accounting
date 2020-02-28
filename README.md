@@ -16,9 +16,8 @@ accounting uses a ledger file format mostly compatible with the original "ledger
 See https://www.ledger-cli.org/3.0/doc/ledger3.html and https://hledger.org/journal.html
 
 # To-Do list
-  + ledger: sort entries
-  + ledger: implement "date=" tag
+  + ledger: sort entries?
+  + ledger: calc and add balances to transactions
+  + ledger: implement "date:" tag ???
   + ledger: notifier
-  + ledger: "D"
-  + ledger: "commodity"
   + ledger: "=" inside split
