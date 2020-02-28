@@ -138,7 +138,7 @@ func printTransaction(t accounting.Transaction) {
 func (l *ledger) balanceLastTransaction(file string, line int) {
 	var unbalancedSplit *accounting.Split
 	balance := make(map[*accounting.Currency]int64)
-	transaction := &l.transactions[len(l.transactions)-1]
+	transaction := l.transactions[len(l.transactions)-1]
 	for i, s := range transaction.Splits {
 		if s.Value.Currency == nil {
 			if unbalancedSplit != nil {
@@ -219,6 +219,9 @@ func (l *ledger) balanceLastTransaction(file string, line int) {
 
 // ReadFile fills a ledger with the data from a journal file.
 func (l *ledger) Read() error {
+	if l.ready {
+		return nil
+	}
 	l.accounts = nil
 	l.transactions = nil
 	l.currencies = nil
@@ -299,7 +302,7 @@ func (l *ledger) Read() error {
 				if len(l.transactions) > 1 && l.transactions[len(l.transactions)-1].Time.After(date) {
 					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
 				}
-				l.transactions = append(l.transactions, transaction)
+				l.transactions = append(l.transactions, &transaction)
 				lastLine = lineTransaction
 				lastTransactionFile = line.Filename
 				lastTransactionLine = line.LineNum
@@ -349,7 +352,7 @@ func (l *ledger) Read() error {
 		}
 		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {
 			// split
-			t := &l.transactions[len(l.transactions)-1]
+			t := l.transactions[len(l.transactions)-1]
 			s := accounting.Split{}
 			i := strings.Index(text, "  ")
 			if i > 0 {
@@ -404,6 +407,7 @@ func (l *ledger) Read() error {
 	if lastLine == lineSplit {
 		l.balanceLastTransaction(lastTransactionFile, lastTransactionLine)
 	}
+	l.ready = true
 	return nil
 }
 

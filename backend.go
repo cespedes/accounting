@@ -17,7 +17,7 @@ type Conn interface {
 	Accounts() []*Account
 
 	// Transaction returns all the transactions
-	Transactions() []Transaction
+	Transactions() []*Transaction
 }
 
 // ConnExtra contains some extra methods that Conn could support.

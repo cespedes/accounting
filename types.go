@@ -33,19 +33,21 @@ type Account struct {
 	ID      int      // Used to identify this account.
 	Parent  *Account // Optional
 	Name    string   // Common name (ie, "Cash")
-	Code    string   // Optional: for example, account number
+	Code    string   // Optional. For example, account number
 	Comment string   // Optional
+	Splits  []*Split // List of movements in this account
 	Balance Balance  // Final balance of this account
 }
 
 // Split is a deposit or withdrawal from an account.
 type Split struct {
-	Account *Account   // Origin or destination of funds
-	Value   Value      // Amount to be transferred
-	EqValue *Value     // Price of this value, in another currency
-	Balance Balance    // Balance of this account, after this movement
-	Time    *time.Time // if nil, it inherits the transactions' time
-	Comment string     // Split comment (if any)
+	Account     *Account     // Origin or destination of funds
+	Transaction *Transaction // Transaction this split belongs to
+	Value       Value        // Amount to be transferred
+	EqValue     *Value       // Price of this value, in another currency
+	Balance     Balance      // Balance of this account, after this movement
+	Time        *time.Time   // In most cases, this is equal to Transaction.Time
+	Comment     string       // Split comment (if any)
 }
 
 // Price declares a market price, which is an exchange rate between

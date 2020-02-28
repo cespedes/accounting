@@ -14,8 +14,9 @@ func init() {
 
 type ledger struct {
 	file            string
+	ready           bool
 	accounts        []*accounting.Account
-	transactions    []accounting.Transaction
+	transactions    []*accounting.Transaction
 	currencies      []*accounting.Currency
 	prices          []accounting.Price
 	defaultCurrency *accounting.Currency
@@ -36,7 +37,7 @@ func (l *ledger) Accounts() (accounts []*accounting.Account) {
 	return l.accounts
 }
 
-func (l *ledger) Transactions() (transactions []accounting.Transaction) {
+func (l *ledger) Transactions() (transactions []*accounting.Transaction) {
 	l.Read()
 	return l.transactions
 }

@@ -151,7 +151,7 @@ func (l *Ledger) Accounts() []*Account {
 }
 
 // Transactions returns all the transactions.
-func (l *Ledger) Transactions() []Transaction {
+func (l *Ledger) Transactions() []*Transaction {
 	return l.driver.Transactions()
 }
 
@@ -218,14 +218,14 @@ func (l *Ledger) GetBalance(account int, when time.Time) Balance {
 
 // TransactionsInAccount gets the list of all the transactions
 // involving that account.
-func (l *Ledger) TransactionsInAccount(account int) []Transaction {
+func (l *Ledger) TransactionsInAccount(account int) []*Transaction {
 	x, ok := l.driver.(interface {
-		TransactionsInAccount(int) []Transaction
+		TransactionsInAccount(int) []*Transaction
 	})
 	if ok {
 		return x.TransactionsInAccount(account)
 	}
-	trans := make([]Transaction, 0)
+	trans := make([]*Transaction, 0)
 	for _, t := range l.Transactions() {
 		for _, s := range t.Splits {
 			// log.Printf("s.Account.ID=%d account=%d", s.Account.ID, account)
@@ -240,14 +240,14 @@ func (l *Ledger) TransactionsInAccount(account int) []Transaction {
 }
 
 // TransactionsInInterval returns all the transactions between two times.
-func (l *Ledger) TransactionsInInterval(start, end time.Time) []Transaction {
+func (l *Ledger) TransactionsInInterval(start, end time.Time) []*Transaction {
 	x, ok := l.driver.(interface {
-		TransactionsInInterval(time.Time, time.Time) []Transaction
+		TransactionsInInterval(time.Time, time.Time) []*Transaction
 	})
 	if ok {
 		return x.TransactionsInInterval(start, end)
 	}
-	trans := make([]Transaction, 0)
+	trans := make([]*Transaction, 0)
 	for _, t := range l.Transactions() {
 		if start.After(t.Time) {
 			continue

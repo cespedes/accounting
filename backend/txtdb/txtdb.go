@@ -25,7 +25,7 @@ type conn struct {
 	dir          string
 	accounts     []*accounting.Account
 	accountMap   map[int]*accounting.Account
-	transactions []accounting.Transaction
+	transactions []*accounting.Transaction
 	updated      time.Time
 	currency     accounting.Currency // just one currency for now
 }
@@ -103,7 +103,7 @@ func (c *conn) Accounts() (accounts []*accounting.Account) {
 	return
 }
 
-func (c *conn) Transactions() (transactions []accounting.Transaction) {
+func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 	t := time.Now()
 	if t.Sub(c.updated) > refreshTimeout {
 		c.Accounts()
@@ -180,7 +180,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
-			transactions = append(transactions, *tr)
+			transactions = append(transactions, tr)
 			tr = nil
 			nextID++
 		}

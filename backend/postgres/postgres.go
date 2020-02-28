@@ -35,7 +35,7 @@ func (driver) Open(name string) (accounting.Conn, error) {
 type conn struct {
 	db           *sql.DB
 	accounts     []*accounting.Account
-	transactions []accounting.Transaction
+	transactions []*accounting.Transaction
 	updated      time.Time
 }
 
@@ -80,7 +80,7 @@ func (c *conn) Accounts() (result []*accounting.Account) {
 	return
 }
 
-func (c *conn) Transactions() (transactions []accounting.Transaction) {
+func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 	t := time.Now()
 	if t.Sub(c.updated) > refreshTimeout {
 		c.Accounts()
@@ -111,7 +111,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 			panic(err)
 		}
 		if l := len(transactions); l == 0 || transactions[l-1].ID != tid {
-			transactions = append(transactions, accounting.Transaction{
+			transactions = append(transactions, &accounting.Transaction{
 				ID:          tid,
 				Time:        date,
 				Description: desc})
@@ -120,7 +120,7 @@ func (c *conn) Transactions() (transactions []accounting.Transaction) {
 		split.Account = idAccount[aid]
 		split.Value.Currency = nil
 		split.Value.Amount = value
-		tra := &transactions[len(transactions)-1]
+		tra := transactions[len(transactions)-1]
 		tra.Splits = append(tra.Splits, split)
 	}
 	c.transactions = transactions
