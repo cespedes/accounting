@@ -64,6 +64,17 @@ type ScannerLine struct {
 	Err      error
 }
 
+const (
+	lineNone = iota
+	lineAccount
+	lineDefaultCurrency
+	lineCommodity
+	linePrice
+	lineTransaction
+	lineSplit
+	lineInclude
+)
+
 func NewScanner() *Scanner {
 	s := new(Scanner)
 	return s
@@ -104,16 +115,6 @@ func (s *Scanner) Line() ScannerLine {
 	}
 	return line
 }
-
-const (
-	lineNone = iota
-	lineAccount
-	lineCommodity
-	linePrice
-	lineTransaction
-	lineSplit
-	lineInclude
-)
 
 func addComment(old *string, new string) {
 	if *old == "" {
@@ -317,6 +318,25 @@ func (l *ledger) Read() error {
 			}
 			l.prices = append(l.prices, price)
 			lastLine = linePrice
+			continue
+		}
+		if !indented && word == "D" {
+			lastLine = lineDefaultCurrency
+			price, err := l.getValue(rest)
+			if err != nil {
+				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
+				continue
+			}
+			l.defaultCurrency = price.Currency
+			continue
+		}
+		if !indented && word == "commodity" {
+			lastLine = lineCommodity
+			_, err := l.getValue(rest)
+			if err != nil {
+				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
+				continue
+			}
 			continue
 		}
 		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {

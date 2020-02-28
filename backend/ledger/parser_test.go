@@ -27,6 +27,7 @@ var testValues [][]testValue = [][]testValue{
 		{"1.000", "", true},
 	},
 	{
+		{"3 NYSE:T", "3 NYSE:T", false},
 		{"1.000.000", "1.000.000", false},
 		{"1eur", "1eur", false},
 		{"eur1", "1eur", false},

@@ -6,10 +6,10 @@ import (
 	"github.com/cespedes/accounting"
 )
 
-type Driver struct{}
+type driver struct{}
 
 func init() {
-	accounting.Register("ledger", Driver{})
+	accounting.Register("ledger", driver{})
 }
 
 type ledger struct {
@@ -21,7 +21,7 @@ type ledger struct {
 	defaultCurrency *accounting.Currency
 }
 
-func (Driver) Open(name string) (accounting.Conn, error) {
+func (driver) Open(name string) (accounting.Conn, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,8 @@ func (Driver) Open(name string) (accounting.Conn, error) {
 }
 
 func (l *ledger) Accounts() (accounts []*accounting.Account) {
-	return nil
+	l.Read()
+	return l.accounts
 }
 
 func (l *ledger) Transactions() (transactions []accounting.Transaction) {
