@@ -3,16 +3,12 @@ package accounting
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
 	"sort"
 	"sync"
 	"time"
 )
-
-// Ledger stores all the accounts and transactions in one accounting
-type Ledger struct {
-	driver Conn
-}
 
 var (
 	driversMu      sync.RWMutex
@@ -42,12 +38,11 @@ func Open(dataSource string) (*Ledger, error) {
 	if drivers[backend] == nil {
 		return nil, errors.New("accounting.Open: Backend " + backend + " is not registered.")
 	}
-	conn, err := drivers[backend].Open(dataSource)
+	l := new(Ledger)
+	l.connection, err = drivers[backend].Open(dataSource, l)
 	if err != nil {
 		return nil, err
 	}
-	l := new(Ledger)
-	l.driver = conn
 
 	return l, nil
 }
@@ -64,13 +59,6 @@ func Register(name string, driver Driver) {
 		panic("accounting: Register called twice for driver " + name)
 	}
 	drivers[name] = driver
-}
-
-func abs64(n int64) int64 {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 // String returns a string with the correct
@@ -127,7 +115,7 @@ func (value Value) String() string {
 	return result
 }
 
-// String returns "0" for empty balances, or a list of its values
+// String returns "0" for empty balances, or a list of its values separated by commas.
 func (b Balance) String() string {
 	if len(b) == 0 {
 		return "0"
@@ -135,46 +123,33 @@ func (b Balance) String() string {
 	var s string
 	for c, a := range b {
 		var v = Value{Amount: a, Currency: c}
-		s = s + v.String()
+		if s != "" {
+			s += ", "
+		}
+		s += v.String()
 	}
 	return s
 }
 
 // Close closes the ledger and prevents new queries from starting.
 func (l *Ledger) Close() error {
-	return l.driver.Close()
+	return l.connection.Close()
 }
 
-// Accounts returns the list of all the accounts.
-func (l *Ledger) Accounts() []*Account {
-	return l.driver.Accounts()
+// Refresh loads again (if needed) all the accounting data.
+func (l *Ledger) Refresh() {
+	l.connection.Refresh(l)
 }
 
-// Transactions returns all the transactions.
-func (l *Ledger) Transactions() []*Transaction {
-	return l.driver.Transactions()
-}
-
-// Prices returns the list of prices.
-func (l *Ledger) Prices() []Price {
-	x, ok := l.driver.(interface {
-		Prices() []Price
-	})
-	if ok {
-		return x.Prices()
-	}
-	return nil
-}
-
-// Account returns details for one account, given its id.
-func (l *Ledger) Account(id int) *Account {
-	x, ok := l.driver.(interface {
-		Account(int) *Account
+// Account returns details for one account, given its ID.
+func (l *Ledger) Account(id ID) *Account {
+	x, ok := l.connection.(interface {
+		Account(id ID) *Account
 	})
 	if ok {
 		return x.Account(id)
 	}
-	for _, a := range l.Accounts() {
+	for _, a := range l.Accounts {
 		if a.ID == id {
 			return a
 		}
@@ -194,9 +169,9 @@ func (a Account) FullName() string {
 
 // GetBalance gets an account balance at a given time.
 // If passed the zero value, it gets the current balance.
-func (l *Ledger) GetBalance(account int, when time.Time) Balance {
-	x, ok := l.driver.(interface {
-		GetBalance(int, time.Time) Balance
+func (l *Ledger) GetBalance(account ID, when time.Time) Balance {
+	x, ok := l.connection.(interface {
+		GetBalance(ID, time.Time) Balance
 	})
 	if ok {
 		return x.GetBalance(account, when)
@@ -218,15 +193,15 @@ func (l *Ledger) GetBalance(account int, when time.Time) Balance {
 
 // TransactionsInAccount gets the list of all the transactions
 // involving that account.
-func (l *Ledger) TransactionsInAccount(account int) []*Transaction {
-	x, ok := l.driver.(interface {
-		TransactionsInAccount(int) []*Transaction
+func (l *Ledger) TransactionsInAccount(account ID) []*Transaction {
+	x, ok := l.connection.(interface {
+		TransactionsInAccount(ID) []*Transaction
 	})
 	if ok {
 		return x.TransactionsInAccount(account)
 	}
 	trans := make([]*Transaction, 0)
-	for _, t := range l.Transactions() {
+	for _, t := range l.Transactions {
 		for _, s := range t.Splits {
 			// log.Printf("s.Account.ID=%d account=%d", s.Account.ID, account)
 			if s.Account.ID == account {
@@ -241,14 +216,14 @@ func (l *Ledger) TransactionsInAccount(account int) []*Transaction {
 
 // TransactionsInInterval returns all the transactions between two times.
 func (l *Ledger) TransactionsInInterval(start, end time.Time) []*Transaction {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		TransactionsInInterval(time.Time, time.Time) []*Transaction
 	})
 	if ok {
 		return x.TransactionsInInterval(start, end)
 	}
 	trans := make([]*Transaction, 0)
-	for _, t := range l.Transactions() {
+	for _, t := range l.Transactions {
 		if start.After(t.Time) {
 			continue
 		}
@@ -262,7 +237,7 @@ func (l *Ledger) TransactionsInInterval(start, end time.Time) []*Transaction {
 
 // NewAccount adds a new Account in a ledger
 func (l *Ledger) NewAccount(a Account) (*Account, error) {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		NewAccount(Account) (*Account, error)
 	})
 	if ok {
@@ -273,7 +248,7 @@ func (l *Ledger) NewAccount(a Account) (*Account, error) {
 
 // EditAccount edits an Account in a ledger
 func (l *Ledger) EditAccount(a Account) (*Account, error) {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		EditAccount(Account) (*Account, error)
 	})
 	if ok {
@@ -284,7 +259,7 @@ func (l *Ledger) EditAccount(a Account) (*Account, error) {
 
 // NewTransaction adds a new Transaction in a ledger
 func (l *Ledger) NewTransaction(t Transaction) (*Transaction, error) {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		NewTransaction(Transaction) (*Transaction, error)
 	})
 	if ok {
@@ -295,7 +270,7 @@ func (l *Ledger) NewTransaction(t Transaction) (*Transaction, error) {
 
 // EditTransaction edits a Transaction in a ledger
 func (l *Ledger) EditTransaction(t Transaction) (*Transaction, error) {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		EditTransaction(Transaction) (*Transaction, error)
 	})
 	if ok {
@@ -306,7 +281,7 @@ func (l *Ledger) EditTransaction(t Transaction) (*Transaction, error) {
 
 // Flush writes all the pending changes to the backend.
 func (l *Ledger) Flush() error {
-	x, ok := l.driver.(interface {
+	x, ok := l.connection.(interface {
 		Flush() error
 	})
 	if ok {
@@ -324,4 +299,96 @@ func SortAccounts(accounts []*Account) []*Account {
 		return accounts[i].FullName() < accounts[j].FullName()
 	})
 	return accounts
+}
+
+func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
+	var unbalancedSplit *Split
+	balance := make(map[*Currency]int64)
+	for i, s := range transaction.Splits {
+		if s.Value.Currency == nil {
+			if unbalancedSplit != nil {
+				return errors.New("more than one posting without amount")
+			}
+			unbalancedSplit = transaction.Splits[i]
+			continue
+		}
+		if s.EqValue != nil {
+			balance[s.EqValue.Currency] += s.EqValue.Amount
+		} else {
+			balance[s.Value.Currency] += s.Value.Amount
+		}
+	}
+	for c, a := range balance {
+		if a == 0 {
+			delete(balance, c)
+		}
+	}
+	if len(balance) == 0 {
+		// everything is balanced
+		return nil
+	}
+	if unbalancedSplit != nil && len(balance) == 1 {
+		for c, a := range balance {
+			unbalancedSplit.Value.Currency = c
+			unbalancedSplit.Value.Amount = -a
+			return nil
+		}
+		panic("balanceLastTransaction(): assertion failed")
+	}
+	if unbalancedSplit != nil {
+		return fmt.Errorf("could not balance account %q: two or more currencies in transaction", unbalancedSplit.Account.FullName())
+	}
+	if len(balance) == 1 {
+		var v Value
+		for c, a := range balance {
+			v.Amount = a
+			v.Currency = c
+		}
+		return fmt.Errorf("could not balance transaction: total amount is %s", v.String())
+	}
+	if len(balance) == 2 {
+		var values []Value
+		for c, a := range balance {
+			var value Value
+			value.Amount = a
+			value.Currency = c
+			values = append(values, value)
+		}
+		// we add 2 automatic prices, converting one currency to another and vice-versa
+		var price Price
+		var i *big.Int
+		price.Time = transaction.Time
+		price.Comment = `automatic`
+		price.Currency = values[0].Currency
+		i = big.NewInt(-U)
+		i.Mul(i, big.NewInt(values[1].Amount))
+		i.Quo(i, big.NewInt(values[0].Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = values[1].Currency
+		l.Prices = append(l.Prices, price)
+		price.Currency = values[1].Currency
+		i = big.NewInt(-U)
+		i.Mul(i, big.NewInt(values[0].Amount))
+		i.Quo(i, big.NewInt(values[1].Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = values[0].Currency
+		l.Prices = append(l.Prices, price)
+		return nil
+	}
+	if len(balance) > 2 {
+		return errors.New("not able to balance transactions with 3 or more currencies")
+	}
+	panic("balanceLastTransaction(): unreachable code")
+}
+
+func (l *Ledger) GetCurrency(s string) *Currency {
+	for i := range l.Currencies {
+		if s == l.Currencies[i].Name {
+			return l.Currencies[i]
+		}
+	}
+	var currency Currency
+	currency.Name = s
+	l.Currencies = append(l.Currencies, &currency)
+	return &currency
 }

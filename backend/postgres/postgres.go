@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cespedes/accounting"
@@ -18,7 +19,7 @@ func init() {
 
 const refreshTimeout = 5 * time.Second
 
-func (driver) Open(name string) (accounting.Conn, error) {
+func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
 	db, err := sql.Open("postgres", name)
 	if err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())
@@ -29,25 +30,25 @@ func (driver) Open(name string) (accounting.Conn, error) {
 	// TODO I should check the SQL schema...
 	conn := new(conn)
 	conn.db = db
+	getAccounts(conn, ledger)
+	getTransactions(conn, ledger)
 	return conn, nil
 }
 
 type conn struct {
-	db           *sql.DB
-	accounts     []*accounting.Account
-	transactions []*accounting.Transaction
-	updated      time.Time
+	db      *sql.DB
+	updated time.Time
+}
+
+func (c *conn) Refresh(l *accounting.Ledger) {
+	// TODO: use notifier
 }
 
 func (c *conn) Close() error {
 	return c.db.Close()
 }
 
-func (c *conn) Accounts() (result []*accounting.Account) {
-	t := time.Now()
-	if t.Sub(c.updated) < refreshTimeout && c.accounts != nil {
-		return c.accounts
-	}
+func getAccounts(c *conn, ledger *accounting.Ledger) {
 	query := `
 		SELECT a.id, a.name, COALESCE(a.code, '') AS code,
 			COALESCE((100*sum(s.value))::integer, 0) AS balance
@@ -58,6 +59,7 @@ func (c *conn) Accounts() (result []*accounting.Account) {
 	if err != nil {
 		panic(err)
 	}
+	ledger.Accounts = nil
 	for rows.Next() {
 		var (
 			id      int
@@ -73,23 +75,24 @@ func (c *conn) Accounts() (result []*accounting.Account) {
 		acc.Name = name
 		acc.Code = code
 		// acc.Balance = balance
-		result = append(result, &acc)
+		ledger.Accounts = append(result, &acc)
 	}
-	c.accounts = result
-	c.updated = time.Now()
-	return
 }
 
-func (c *conn) Transactions() (transactions []*accounting.Transaction) {
-	t := time.Now()
-	if t.Sub(c.updated) > refreshTimeout {
-		c.Accounts()
-	} else if c.transactions != nil {
-		return c.transactions
-	}
-	idAccount := make(map[int]*accounting.Account)
-	for i, a := range c.accounts {
-		idAccount[a.ID] = c.accounts[i]
+type ID struct {
+	id       int
+	filename string
+	line     int
+}
+
+func (id ID) ID(name string) string {
+	return fmt.Sprintf("%s (id %d) in %s:%d", name, id.id, id.filename, id.line)
+}
+
+func getTransactions(c *conn, ledger *accounting.Ledger) {
+	idAccount := make(map[accounting.ID]*accounting.Account)
+	for i, a := range ledger.Accounts {
+		idAccount[a.ID] = ledger.Accounts[i]
 	}
 	query := `
 		SELECT datetime,transaction_id,account_id,description,(100*value)::integer,(100*balance)::integer FROM money
@@ -101,29 +104,28 @@ func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 	for rows.Next() {
 		var (
 			date    time.Time
-			tid     int
-			aid     int
+			tid     ID
+			aid     ID
 			desc    string
 			value   int64
 			balance int
 		)
-		if err := rows.Scan(&date, &tid, &aid, &desc, &value, &balance); err != nil {
+		if err := rows.Scan(&date, &tid.id, &aid, &desc, &value, &balance); err != nil {
 			panic(err)
 		}
-		if l := len(transactions); l == 0 || transactions[l-1].ID != tid {
-			transactions = append(transactions, &accounting.Transaction{
+		if l := len(ledger.Transactions); l == 0 || ledger.Transactions[l-1].ID != tid {
+			ledger.Transactions = append(ledger.Transactions, &accounting.Transaction{
 				ID:          tid,
 				Time:        date,
 				Description: desc})
 		}
-		var split accounting.Split
+		split := new(accounting.Split)
 		split.Account = idAccount[aid]
 		split.Value.Currency = nil
 		split.Value.Amount = value
-		tra := transactions[len(transactions)-1]
+		tra := ledger.Transactions[len(ledger.Transactions)-1]
 		tra.Splits = append(tra.Splits, split)
 	}
-	c.transactions = transactions
 	return
 }
 

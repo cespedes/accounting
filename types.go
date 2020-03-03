@@ -2,14 +2,29 @@ package accounting
 
 import "time"
 
-// U is the amount by which every amount must be multiplied before storing it
+// U is the number by which every amount must be multiplied before storing it.
 const U = 100_000_000
+
+// Ledger stores all the accounts and transactions in one accounting.
+type Ledger struct {
+	connection   Connection
+	Accounts     []*Account
+	Transactions []*Transaction
+	Currencies   []*Currency
+	Prices       []Price
+}
+
+// ID is used to identify one currency, account, transaction or price.
+type ID interface {
+	ID(name string) string
+}
 
 // Currency represents a currency or commodity, and stores
 // its name and how to display it with an amount.
 //
 // For more ideas on Currency, see github.com/leekchan/accounting
 type Currency struct {
+	ID          ID     // used to identify this currency
 	Name        string // "EUR", "USD", etc
 	PrintBefore bool   // "$1.00" vs "1.00$"
 	PrintSpace  bool   // "1.00EUR" vs "1.00 EUR"
@@ -30,7 +45,7 @@ type Balance map[*Currency]int64
 
 // Account specifies one origin or destination of funds.
 type Account struct {
-	ID      int      // Used to identify this account.
+	ID      ID       // used to identify this account.
 	Parent  *Account // Optional
 	Name    string   // Common name (ie, "Cash")
 	Code    string   // Optional. For example, account number
@@ -53,6 +68,7 @@ type Split struct {
 // Price declares a market price, which is an exchange rate between
 // two currencies on a certain date.
 type Price struct {
+	ID       ID // used to identify this price.
 	Time     time.Time
 	Currency *Currency
 	Value    Value
@@ -68,10 +84,10 @@ type Tag struct {
 // Transaction stores an entry in the journal, consisting in a timestamp,
 // a description and two or more money movements from different accounts.
 type Transaction struct {
-	ID          int       // Used to identify this transaction
+	ID          ID        // used to identify this transaction.
 	Time        time.Time // Date and time
 	Description string    // Short description
 	Comment     string    // Transaction comment (optional)
 	Tags        []Tag     // Transaction tags (optional)
-	Splits      []Split   // List of movements
+	Splits      []*Split  // List of movements
 }

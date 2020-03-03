@@ -5,19 +5,16 @@ import "time"
 // Driver is the interface that must be implemented by the
 // accounting backend.
 type Driver interface {
-	Open(name string) (Conn, error)
+	Open(url string, ledger *Ledger) (Connection, error)
 }
 
-// Conn is a connection to an accounting backend.
-type Conn interface {
+// Connection is a connection to an accounting backend.
+type Connection interface {
 	// Close flushes, if necessary, and closes the connection
 	Close() error
 
-	// Accounts returns the list of all the accounts in the ledger
-	Accounts() []*Account
-
-	// Transaction returns all the transactions
-	Transactions() []*Transaction
+	// Refresh loads again (if needed) all the accounting data
+	Refresh(ledger *Ledger)
 }
 
 // ConnExtra contains some extra methods that Conn could support.

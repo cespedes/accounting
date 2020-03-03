@@ -12,40 +12,26 @@ func init() {
 	accounting.Register("ledger", driver{})
 }
 
-type ledger struct {
+type ledgerConnection struct {
 	file            string
-	ready           bool
-	accounts        []*accounting.Account
-	transactions    []*accounting.Transaction
-	currencies      []*accounting.Currency
-	prices          []accounting.Price
 	defaultCurrency *accounting.Currency
 }
 
-func (driver) Open(name string) (accounting.Conn, error) {
+func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
 	}
-	ledger := new(ledger)
-	ledger.file = url.Path
-	return ledger, nil
+	conn := new(ledgerConnection)
+	conn.file = url.Path
+	conn.readJournal(url.Path, ledger)
+	return conn, nil
 }
 
-func (l *ledger) Accounts() (accounts []*accounting.Account) {
-	l.Read()
-	return l.accounts
-}
-
-func (l *ledger) Transactions() (transactions []*accounting.Transaction) {
-	l.Read()
-	return l.transactions
-}
-
-func (l *ledger) Prices() []accounting.Price {
-	return l.prices
-}
-
-func (l *ledger) Close() error {
+func (conn *ledgerConnection) Close() error {
 	return nil
+}
+
+func (conn *ledgerConnection) Refresh(ledger *accounting.Ledger) {
+	// TODO FIXME XXX: notifier
 }

@@ -31,7 +31,7 @@ type conn struct {
 }
 
 // Opens a connection to a txtdb database
-func (p txtDriver) Open(name string) (accounting.Conn, error) {
+func (p txtDriver) Open(name string) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
