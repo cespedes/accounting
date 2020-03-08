@@ -32,7 +32,7 @@ func init() {
 
 const refreshTimeout = 5 * time.Second
 
-func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
+func (driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
 	db, err := sql.Open("postgres", name)
 	if err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())

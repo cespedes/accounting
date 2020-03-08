@@ -154,6 +154,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Precision = 2
 	v.Currency.Decimal = ","
 	v.Currency.Name = "€"
+	v.Currency.WithoutSpace = true
 	if got := v.String(); got != "23,45€" {
 		t.Errorf("Money(23,45€) = %q", got)
 	}
@@ -170,7 +171,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Precision = 2
 	v.Currency.Decimal = ","
 	v.Currency.Name = "EUR"
-	v.Currency.PrintSpace = true
+	v.Currency.WithoutSpace = false
 	if got := v.String(); got != "23,45 EUR" {
 		t.Errorf("Money(23,45 EUR) = %q", got)
 	}
@@ -180,7 +181,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Decimal = "."
 	v.Currency.Name = "USD"
 	v.Currency.PrintBefore = true
-	v.Currency.PrintSpace = true
+	v.Currency.WithoutSpace = false
 	if got := v.String(); got != "USD 23.45" {
 		t.Errorf("Money(USD 23.45) = %q", got)
 	}
@@ -190,7 +191,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Decimal = "."
 	v.Currency.Name = "USD"
 	v.Currency.PrintBefore = true
-	v.Currency.PrintSpace = true
+	v.Currency.WithoutSpace = false
 	if got := v.String(); got != "USD -23.45" {
 		t.Errorf("Money(USD -23.45) = %q", got)
 	}
@@ -200,7 +201,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Decimal = "."
 	v.Currency.Name = "$"
 	v.Currency.PrintBefore = true
-	v.Currency.PrintSpace = false
+	v.Currency.WithoutSpace = true
 	if got := v.String(); got != "$23.45" {
 		t.Errorf("Money($23.45) = %q", got)
 	}
@@ -210,7 +211,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Decimal = "."
 	v.Currency.Name = "$"
 	v.Currency.PrintBefore = true
-	v.Currency.PrintSpace = false
+	v.Currency.WithoutSpace = true
 	if got := v.String(); got != "$-23.45" {
 		t.Errorf("Money($-23.45) = %q", got)
 	}
@@ -220,7 +221,7 @@ func TestCurrencyString(t *testing.T) {
 	v.Currency.Decimal = "."
 	v.Currency.Name = ""
 	v.Currency.PrintBefore = true
-	v.Currency.PrintSpace = false
+	v.Currency.WithoutSpace = true
 	if got := v.String(); got != "-23.45" {
 		t.Errorf("Money(-23.45) = %q", got)
 	}

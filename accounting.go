@@ -40,7 +40,9 @@ func Open(dataSource string) (*Ledger, error) {
 		return nil, errors.New("accounting.Open: Backend " + backend + " is not registered.")
 	}
 	l := new(Ledger)
-	l.connection, err = drivers[backend].Open(dataSource, l)
+	backendLedger := new(BackendLedger)
+	backendLedger.ledger = l
+	l.connection, err = drivers[backend].Open(dataSource, l, backendLedger)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +116,7 @@ func (value Value) getString(full bool) string {
 		result += digits[:precision]
 	}
 	if !c.PrintBefore {
-		if !c.WithoutSpace {
+		if !c.WithoutSpace && c.Name != "" {
 			result += " "
 		}
 		result += c.Name
@@ -192,6 +194,7 @@ func (a Account) FullName() string {
 // GetBalance gets an account balance at a given time.
 // If passed the zero value, it gets the current balance.
 func (l *Ledger) GetBalance(account ID, when time.Time) Balance {
+	// TODO rewrite...
 	x, ok := l.connection.(interface {
 		GetBalance(ID, time.Time) Balance
 	})
@@ -322,10 +325,13 @@ func SortAccounts(accounts []*Account) []*Account {
 	})
 	return accounts
 }
-
 func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
+	return l.balanceTransaction(transaction)
+}
+
+func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 	var unbalancedSplit *Split
-	balance := make(map[*Currency]int64)
+	balance := make(Balance)
 	for i, s := range transaction.Splits {
 		if s.Value.Currency == nil {
 			if unbalancedSplit != nil {
@@ -355,7 +361,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 			unbalancedSplit.Value.Amount = -a
 			return nil
 		}
-		panic("BalanceTransaction(): assertion failed")
+		panic("balanceTransaction(): assertion failed")
 	}
 	if unbalancedSplit != nil {
 		return fmt.Errorf("%s: could not balance account %q: two or more currencies in transaction", transaction.ID, unbalancedSplit.Account.FullName())
@@ -400,7 +406,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 	if len(balance) > 2 {
 		return fmt.Errorf("%s: not able to balance transactions with 3 or more currencies", transaction.ID)
 	}
-	panic("BalanceTransaction(): unreachable code")
+	panic("balanceTransaction(): unreachable code")
 }
 
 func (l *Ledger) GetCurrency(s string) *Currency {

@@ -36,7 +36,7 @@ func (id ID) String() string {
 }
 
 // Opens a connection to a txtdb database
-func (p driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
+func (p driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err

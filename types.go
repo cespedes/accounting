@@ -12,7 +12,6 @@ type Ledger struct {
 	Transactions []*Transaction
 	Currencies   []*Currency
 	Prices       []Price
-	AccountMap   map[string]*Account // not really necessary...
 }
 
 // ID is used to identify one currency, account, transaction or price.
@@ -56,12 +55,13 @@ type Account struct {
 
 // Split is a deposit or withdrawal from an account.
 type Split struct {
-	ID          ID           // used to identify this split
-	Account     *Account     // Origin or destination of funds
-	Transaction *Transaction // Transaction this split belongs to
-	Value       Value        // Amount to be transferred
-	EqValue     *Value       // Price of this value, in another currency
-	Balance     Balance      // Balance of this account, after this movement
+	ID          ID           // used to identify this split.
+	Account     *Account     // Origin or destination of funds.
+	Transaction *Transaction // Transaction this split belongs to.
+	Value       Value        // Amount to be transferred.
+	EqValue     *Value       // Price of this value, in another currency.
+	Balance     Balance      // Balance of this account, after this movement.
+	Assertion   Balance      // What part of the balance should be.
 	Time        *time.Time   // In most cases, this is equal to Transaction.Time
 	Comments    []string     // Split comments (if any)
 }

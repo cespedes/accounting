@@ -34,12 +34,13 @@ date = digit digit digit digit ( "-" | "/" | "." ) digit digit ( "-" | "/" | "."
 indent = " " { " " }
 transaction_price = ( "@" | "@@" ) value .
 balance_assertion = ( "=" | "=*" | "==" | "==*" ) value [ transaction_price ] .
+   (only "=" assertions are supported)
 
 include_line = "include" filename .
 price_line   = "P" date currency value .
 default_currency_line = "D" [ currency | value ] .
 transaction_line = date description .
-split_line = indent account_name [ two_spaces [ value [ transaction_price ] ] [ balance_assertion ] ] .
+split_line = indent account_name [ "  " [ value [ transaction_price ] ] [ balance_assertion ] ] .
 commodity_line = "commodity" value .
 account_name = ( letter | digit ) { letter | digit | ":" | " " } .
 account_line = "account" account_name
@@ -252,7 +253,6 @@ func (l *ledgerConnection) readJournal() error {
 			continue
 		}
 		if !indented && word == "account" {
-			// TODO implement this!
 			lastLine = lineAccount
 			_, new := l.getAccount(rest)
 			if new == false {
@@ -290,6 +290,7 @@ func (l *ledgerConnection) readJournal() error {
 				if newAccount == true {
 					log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
 				}
+				// TODO FIXME XXX implement "="
 				j := strings.Index(text[i:], "@")
 				if j > 0 {
 					s.Value, err = l.getValue(strings.TrimSpace(text[i : i+j]))
@@ -485,7 +486,6 @@ done2:
 		if value.Currency.Decimal != "" && value.Currency.Thousand != "" {
 			return value, fmt.Errorf("syntax error: unknown punctuacion '%c' (thousand='%s', decimal='%s')", c, value.Currency.Thousand, value.Currency.Decimal)
 		}
-		// TODO FIXME XXX
 		// 'c' could be a decimal sign or a thousand sign
 		if i > 3 {
 			value.Currency.Decimal = string(c)

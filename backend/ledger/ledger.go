@@ -20,7 +20,7 @@ type ledgerConnection struct {
 	ledger          *accounting.Ledger
 }
 
-func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
+func (driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 				fmt.Fprintf(out, "\t; %s\n", c)
 			}
 			if s.EqValue != nil {
-				fmt.Fprintf(out, " [%s]", s.EqValue.FullString())
+				fmt.Fprintf(out, " @@ %s", s.EqValue.FullString())
 			}
 			fmt.Fprintf(out, "%s\n", comment)
 		}
