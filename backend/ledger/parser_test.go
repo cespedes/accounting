@@ -53,9 +53,9 @@ var testValues [][]testValue = [][]testValue{
 func TestGetValue(t *testing.T) {
 	for _, cc := range testValues {
 		l := ledgerConnection{}
-		ledger := new(accounting.Ledger)
+		l.ledger = new(accounting.Ledger)
 		for _, c := range cc {
-			v, e := l.getValue(c.input, ledger)
+			v, e := l.getValue(c.input)
 			if c.err && e == nil {
 				t.Errorf("getValue(%q) = %q (expected failure)", c.input, v.String())
 				t.Logf("  (amount = %d, currency=%#v)", v.Amount, v.Currency)

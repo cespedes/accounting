@@ -15,6 +15,7 @@ func init() {
 type ledgerConnection struct {
 	file            string
 	defaultCurrency *accounting.Currency
+	ledger          *accounting.Ledger
 }
 
 func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
@@ -24,7 +25,8 @@ func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connectio
 	}
 	conn := new(ledgerConnection)
 	conn.file = url.Path
-	conn.readJournal(url.Path, ledger)
+	conn.ledger = ledger
+	conn.readJournal()
 	return conn, nil
 }
 
@@ -32,6 +34,6 @@ func (conn *ledgerConnection) Close() error {
 	return nil
 }
 
-func (conn *ledgerConnection) Refresh(ledger *accounting.Ledger) {
+func (conn *ledgerConnection) Refresh() {
 	// TODO FIXME XXX: notifier
 }

@@ -138,7 +138,7 @@ func (l *Ledger) Close() error {
 
 // Refresh loads again (if needed) all the accounting data.
 func (l *Ledger) Refresh() {
-	l.connection.Refresh(l)
+	l.connection.Refresh()
 }
 
 // Account returns details for one account, given its ID.
@@ -307,7 +307,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 	for i, s := range transaction.Splits {
 		if s.Value.Currency == nil {
 			if unbalancedSplit != nil {
-				return errors.New("more than one posting without amount")
+				return fmt.Errorf("%s: more than one posting without amount", transaction.ID)
 			}
 			unbalancedSplit = transaction.Splits[i]
 			continue
@@ -333,10 +333,10 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 			unbalancedSplit.Value.Amount = -a
 			return nil
 		}
-		panic("balanceLastTransaction(): assertion failed")
+		panic("BalanceTransaction(): assertion failed")
 	}
 	if unbalancedSplit != nil {
-		return fmt.Errorf("could not balance account %q: two or more currencies in transaction", unbalancedSplit.Account.FullName())
+		return fmt.Errorf("%s: could not balance account %q: two or more currencies in transaction", transaction.ID, unbalancedSplit.Account.FullName())
 	}
 	if len(balance) == 1 {
 		var v Value
@@ -344,7 +344,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 			v.Amount = a
 			v.Currency = c
 		}
-		return fmt.Errorf("could not balance transaction: total amount is %s", v.String())
+		return fmt.Errorf("%s: could not balance transaction: total amount is %s", transaction.ID, v)
 	}
 	if len(balance) == 2 {
 		var values []Value
@@ -376,9 +376,9 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 		return nil
 	}
 	if len(balance) > 2 {
-		return errors.New("not able to balance transactions with 3 or more currencies")
+		return fmt.Errorf("%s: not able to balance transactions with 3 or more currencies", transaction.ID)
 	}
-	panic("balanceLastTransaction(): unreachable code")
+	panic("BalanceTransaction(): unreachable code")
 }
 
 func (l *Ledger) GetCurrency(s string) *Currency {

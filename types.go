@@ -12,11 +12,12 @@ type Ledger struct {
 	Transactions []*Transaction
 	Currencies   []*Currency
 	Prices       []Price
+	AccountMap   map[string]*Account
 }
 
 // ID is used to identify one currency, account, transaction or price.
 type ID interface {
-	ID(name string) string
+	String() string
 }
 
 // Currency represents a currency or commodity, and stores
@@ -47,15 +48,15 @@ type Balance map[*Currency]int64
 type Account struct {
 	ID      ID       // used to identify this account.
 	Parent  *Account // Optional
-	Name    string   // Common name (ie, "Cash")
+	Name    string   // Common (short) name (ie, "Cash")
 	Code    string   // Optional. For example, account number
 	Comment string   // Optional
 	Splits  []*Split // List of movements in this account
-	Balance Balance  // Final balance of this account
 }
 
 // Split is a deposit or withdrawal from an account.
 type Split struct {
+	ID          ID           // used to identify this split
 	Account     *Account     // Origin or destination of funds
 	Transaction *Transaction // Transaction this split belongs to
 	Value       Value        // Amount to be transferred

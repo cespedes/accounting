@@ -13,6 +13,18 @@ import (
 
 type driver struct{}
 
+type ID int
+
+type conn struct {
+	db      *sql.DB
+	updated time.Time
+	ledger  *accounting.Ledger
+}
+
+func (id ID) String() string {
+	return fmt.Sprintf("%d", id)
+}
+
 func init() {
 	accounting.Register("postgres", driver{})
 }
@@ -35,13 +47,8 @@ func (driver) Open(name string, ledger *accounting.Ledger) (accounting.Connectio
 	return conn, nil
 }
 
-type conn struct {
-	db      *sql.DB
-	updated time.Time
-}
-
-func (c *conn) Refresh(l *accounting.Ledger) {
-	// TODO: use notifier
+func (c *conn) Refresh() {
+	// TODO: do something
 }
 
 func (c *conn) Close() error {
@@ -71,22 +78,12 @@ func getAccounts(c *conn, ledger *accounting.Ledger) {
 		if err := rows.Scan(&id, &name, &code, &balance); err != nil {
 			panic(err)
 		}
-		acc.ID = id
+		acc.ID = ID(id)
 		acc.Name = name
 		acc.Code = code
 		// acc.Balance = balance
-		ledger.Accounts = append(result, &acc)
+		ledger.Accounts = append(ledger.Accounts, &acc)
 	}
-}
-
-type ID struct {
-	id       int
-	filename string
-	line     int
-}
-
-func (id ID) ID(name string) string {
-	return fmt.Sprintf("%s (id %d) in %s:%d", name, id.id, id.filename, id.line)
 }
 
 func getTransactions(c *conn, ledger *accounting.Ledger) {
@@ -110,7 +107,7 @@ func getTransactions(c *conn, ledger *accounting.Ledger) {
 			value   int64
 			balance int
 		)
-		if err := rows.Scan(&date, &tid.id, &aid, &desc, &value, &balance); err != nil {
+		if err := rows.Scan(&date, &tid, &aid, &desc, &value, &balance); err != nil {
 			panic(err)
 		}
 		if l := len(ledger.Transactions); l == 0 || ledger.Transactions[l-1].ID != tid {

@@ -17,21 +17,25 @@ import (
 	"github.com/cespedes/accounting"
 )
 
-type txtDriver struct{}
+type driver struct{}
 
 const refreshTimeout = 5 * time.Second
 
 type conn struct {
-	dir          string
-	accounts     []*accounting.Account
-	accountMap   map[int]*accounting.Account
-	transactions []*accounting.Transaction
-	updated      time.Time
-	currency     accounting.Currency // just one currency for now
+	dir        string
+	ledger     *accounting.Ledger
+	accountMap map[int]*accounting.Account
+	currency   accounting.Currency // just one currency for now
+}
+
+type ID int
+
+func (id ID) String() string {
+	return fmt.Sprintf("id:%d", id)
 }
 
 // Opens a connection to a txtdb database
-func (p txtDriver) Open(name string) (accounting.Connection, error) {
+func (p driver) Open(name string, ledger *accounting.Ledger) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -40,42 +44,28 @@ func (p txtDriver) Open(name string) (accounting.Connection, error) {
 	conn.dir = url.Path
 	conn.accountMap = make(map[int]*accounting.Account)
 	conn.currency.Precision = 2
-	tra := filepath.Join(conn.dir, "transactions")
-	acc := filepath.Join(conn.dir, "accounts")
-	fi, err := os.Stat(tra)
-	if err != nil {
-		return nil, err
-	}
-	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s: %w", acc, err)
-	}
-	fi, err = os.Stat(acc)
-	if err != nil {
-		return nil, err
-	}
-	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s: %w", acc, err)
-	}
+	conn.ledger = ledger
 
-	return conn, nil
+	err = conn.read()
+	return conn, err
 }
 
 func (c *conn) Close() error {
 	return nil
 }
 
+func (c *conn) Refresh() {
+	// TODO FIXME XXX: notifier
+}
+
 func (c *conn) Flush() error {
 	return errors.New("unimplemented")
 }
 
-func (c *conn) Accounts() (accounts []*accounting.Account) {
-	t := time.Now()
-	if t.Sub(c.updated) < refreshTimeout && c.accounts != nil {
-		return c.accounts
-	}
+func (c *conn) read() error {
 	f, err := os.Open(filepath.Join(c.dir, "accounts"))
 	if err != nil {
-		return nil
+		return err
 	}
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -85,36 +75,28 @@ func (c *conn) Accounts() (accounts []*accounting.Account) {
 		if len(fields) != 6 { // badly-formatted line: skip
 			continue
 		}
-		ac.ID, err = strconv.Atoi(fields[0])
+		var id int
+		id, err = strconv.Atoi(fields[0])
 		if err != nil { // TODO: handle errors
 			continue
 		}
+		ac.ID = ID(id)
 		ac.Name = fields[3]
 		ac.Code = fields[4]
 		parent, err := strconv.Atoi(fields[5])
 		if err == nil {
 			ac.Parent = c.accountMap[parent]
 		}
-		c.accountMap[ac.ID] = &ac
-		accounts = append(accounts, &ac)
+		c.accountMap[id] = &ac
+		c.ledger.Accounts = append(c.ledger.Accounts, &ac)
 	}
-	c.accounts = accounting.SortAccounts(accounts)
-	c.updated = time.Now()
-	return
-}
+	c.ledger.Accounts = accounting.SortAccounts(c.ledger.Accounts)
 
-func (c *conn) Transactions() (transactions []*accounting.Transaction) {
-	t := time.Now()
-	if t.Sub(c.updated) > refreshTimeout {
-		c.Accounts()
-	} else if c.transactions != nil {
-		return c.transactions
-	}
-	f, err := os.Open(filepath.Join(c.dir, "transactions"))
+	f, err = os.Open(filepath.Join(c.dir, "transactions"))
 	if err != nil {
 		return nil
 	}
-	sc := bufio.NewScanner(f)
+	sc = bufio.NewScanner(f)
 	nextID := 1
 	var balance int64
 	var tr *accounting.Transaction
@@ -137,9 +119,9 @@ func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 			}
 			continue
 		}
-		if tr.ID == 0 { // Fill tr only if it is not already filled
+		if tr.ID == nil { // Fill tr only if it is not already filled
 			// First field (used to be "id") is ignored
-			tr.ID = nextID
+			tr.ID = ID(nextID)
 			tr.Time, err = time.Parse("2006-01-02 15.04", strings.TrimSpace(fields[1]))
 			if err != nil {
 				tr.Time, err = time.Parse("2006-01-02", strings.TrimSpace(fields[1]))
@@ -155,7 +137,7 @@ func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
 			continue
 		}
-		var sp accounting.Split
+		sp := new(accounting.Split)
 		sp.Account = c.accountMap[accountID]
 		if sp.Account == nil {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
@@ -180,21 +162,22 @@ func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
-			transactions = append(transactions, tr)
+			log.Printf("TR: %s %s", tr.Time.Format("2006-01-02"), tr.Description)
+			c.ledger.Transactions = append(c.ledger.Transactions, tr)
 			tr = nil
 			nextID++
 		}
 	}
-	sort.Slice(transactions, func(i, j int) bool {
-		if transactions[i].Time == transactions[j].Time {
+	sort.Slice(c.ledger.Transactions, func(i, j int) bool {
+		if c.ledger.Transactions[i].Time == c.ledger.Transactions[j].Time {
 			return i < j
 		}
-		return transactions[i].Time.Before(transactions[j].Time)
+		return c.ledger.Transactions[i].Time.Before(c.ledger.Transactions[j].Time)
 	})
 	accountBalances := make(map[*accounting.Account]accounting.Balance)
-	for i := range transactions {
-		for j := range transactions[i].Splits {
-			s := &transactions[i].Splits[j]
+	for i := range c.ledger.Transactions {
+		for j := range c.ledger.Transactions[i].Splits {
+			s := c.ledger.Transactions[i].Splits[j]
 			if accountBalances[s.Account] == nil {
 				accountBalances[s.Account] = make(accounting.Balance)
 			}
@@ -202,10 +185,9 @@ func (c *conn) Transactions() (transactions []*accounting.Transaction) {
 			s.Balance = accountBalances[s.Account]
 		}
 	}
-	c.transactions = transactions
-	return
+	return nil
 }
 
 func init() {
-	accounting.Register("txtdb", txtDriver{})
+	accounting.Register("txtdb", driver{})
 }

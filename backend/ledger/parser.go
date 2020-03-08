@@ -64,6 +64,15 @@ type ScannerLine struct {
 	Err      error
 }
 
+type ID struct {
+	filename string
+	lineNum  int
+}
+
+func (id ID) String() string {
+	return fmt.Sprintf("%s:%d", id.filename, id.lineNum)
+}
+
 const (
 	lineNone = iota
 	lineAccount
@@ -125,11 +134,11 @@ func addComment(old *string, new string) {
 }
 
 // Read fills a ledger with the data from a journal file.
-func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledger) error {
-	ledger.Accounts = nil
-	ledger.Transactions = nil
-	ledger.Currencies = nil
-	ledger.Prices = nil
+func (l *ledgerConnection) readJournal() error {
+	l.ledger.Accounts = nil
+	l.ledger.Transactions = nil
+	l.ledger.Currencies = nil
+	l.ledger.Prices = nil
 	l.defaultCurrency = nil
 	s := NewScanner()
 	s.NewFile(l.file)
@@ -162,15 +171,15 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 			} else {
 				switch lastLine {
 				case lineAccount:
-					addComment(&ledger.Accounts[len(ledger.Accounts)-1].Comment, comment)
+					addComment(&l.ledger.Accounts[len(l.ledger.Accounts)-1].Comment, comment)
 				case lineCommodity:
-					addComment(&ledger.Currencies[len(ledger.Currencies)-1].Comment, comment)
+					addComment(&l.ledger.Currencies[len(l.ledger.Currencies)-1].Comment, comment)
 				case linePrice:
-					addComment(&ledger.Prices[len(ledger.Prices)-1].Comment, comment)
+					addComment(&l.ledger.Prices[len(l.ledger.Prices)-1].Comment, comment)
 				case lineTransaction:
-					addComment(&ledger.Transactions[len(ledger.Transactions)-1].Comment, comment)
+					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Comment, comment)
 				case lineSplit:
-					addComment(&ledger.Transactions[len(ledger.Transactions)-1].Splits[len(ledger.Transactions[len(ledger.Transactions)-1].Splits)-1].Comment, comment)
+					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits[len(l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits)-1].Comment, comment)
 				default:
 					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 				}
@@ -182,7 +191,10 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 			text = strings.TrimSpace(text[0:i])
 		}
 		if !indented && lastLine == lineSplit {
-			ledger.BalanceTransaction(ledger.Transactions[len(ledger.Transactions)-1])
+			err := l.ledger.BalanceTransaction(l.ledger.Transactions[len(l.ledger.Transactions)-1])
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 		word, rest := firstWord(text)
 		if !indented && word == "include" {
@@ -198,13 +210,14 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 			date, err := getDate(word)
 			if err == nil {
 				var transaction accounting.Transaction
+				transaction.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 				transaction.Time = date
 				transaction.Description = rest
 				transaction.Comment = comment
-				if len(ledger.Transactions) > 1 && ledger.Transactions[len(ledger.Transactions)-1].Time.After(date) {
+				if len(l.ledger.Transactions) > 1 && l.ledger.Transactions[len(l.ledger.Transactions)-1].Time.After(date) {
 					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
 				}
-				ledger.Transactions = append(ledger.Transactions, &transaction)
+				l.ledger.Transactions = append(l.ledger.Transactions, &transaction)
 				lastLine = lineTransaction
 				continue
 			}
@@ -220,20 +233,21 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 				continue
 			}
 			currency, rest := firstWord(rest)
-			price.Currency = ledger.GetCurrency(currency)
-			price.Value, err = l.getValue(rest, ledger)
+			price.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
+			price.Currency = l.ledger.GetCurrency(currency)
+			price.Value, err = l.getValue(rest)
 			price.Comment = comment
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
-			ledger.Prices = append(ledger.Prices, price)
+			l.ledger.Prices = append(l.ledger.Prices, price)
 			lastLine = linePrice
 			continue
 		}
 		if !indented && word == "D" {
 			lastLine = lineDefaultCurrency
-			price, err := l.getValue(rest, ledger)
+			price, err := l.getValue(rest)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
@@ -243,24 +257,29 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 		}
 		if !indented && word == "commodity" {
 			lastLine = lineCommodity
-			_, err := l.getValue(rest, ledger)
+			_, err := l.getValue(rest)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
 			continue
 		}
+		if !indented && word == "account" {
+			lastLine = lineAccount
+		}
 		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {
 			// split
-			t := ledger.Transactions[len(ledger.Transactions)-1]
+			t := l.ledger.Transactions[len(l.ledger.Transactions)-1]
 			s := new(accounting.Split)
+			s.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
+
 			i := strings.Index(text, "  ")
 			if i > 0 {
 				var err error
-				s.Account = getAccount(text[:i], ledger)
+				s.Account = l.getAccount(text[:i])
 				j := strings.Index(text[i:], "@")
 				if j > 0 {
-					s.Value, err = l.getValue(strings.TrimSpace(text[i:i+j]), ledger)
+					s.Value, err = l.getValue(strings.TrimSpace(text[i : i+j]))
 					if err != nil {
 						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 						continue
@@ -271,14 +290,14 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 					}
 					if text[i+j+1] == '@' {
 						s.EqValue = new(accounting.Value)
-						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+2:]), ledger)
+						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+2:]))
 						if err != nil {
 							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 							continue
 						}
 					} else {
 						s.EqValue = new(accounting.Value)
-						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+1:]), ledger)
+						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+1:]))
 						if err != nil {
 							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 							continue
@@ -289,14 +308,14 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 						s.EqValue.Amount = k.Int64()
 					}
 				} else {
-					s.Value, err = l.getValue(strings.TrimSpace(text[i:]), ledger)
+					s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
 					if err != nil {
 						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 						continue
 					}
 				}
 			} else {
-				s.Account = getAccount(text, ledger)
+				s.Account = l.getAccount(text)
 			}
 			t.Splits = append(t.Splits, s)
 			lastLine = lineSplit
@@ -305,25 +324,28 @@ func (l *ledgerConnection) readJournal(filename string, ledger *accounting.Ledge
 		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
 	}
 	if lastLine == lineSplit {
-		ledger.BalanceTransaction(ledger.Transactions[len(ledger.Transactions)-1])
+		err := l.ledger.BalanceTransaction(l.ledger.Transactions[len(l.ledger.Transactions)-1])
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	return nil
 }
 
-func getAccount(s string, ledger *accounting.Ledger) *accounting.Account {
-	for i := range ledger.Accounts {
-		if s == ledger.Accounts[i].Name {
-			return ledger.Accounts[i]
+func (l *ledgerConnection) getAccount(s string) *accounting.Account {
+	for i := range l.ledger.Accounts {
+		if s == l.ledger.Accounts[i].Name {
+			return l.ledger.Accounts[i]
 		}
 	}
 	var account accounting.Account
+	// account.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 	account.Name = s
-	account.Balance = make(accounting.Balance)
-	ledger.Accounts = append(ledger.Accounts, &account)
+	l.ledger.Accounts = append(l.ledger.Accounts, &account)
 	return &account
 }
 
-func (l *ledgerConnection) getValue(s string, ledger *accounting.Ledger) (accounting.Value, error) {
+func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 	var value accounting.Value
 	value.Currency = new(accounting.Currency)
 	var sAmount string
@@ -371,14 +393,14 @@ done:
 			newCurrency = false
 		}
 	} else {
-		for _, c := range ledger.Currencies {
+		for _, c := range l.ledger.Currencies {
 			if c.Name == value.Currency.Name {
 				value.Currency = c
 				newCurrency = false
 				goto done2
 			}
 		}
-		ledger.Currencies = append(ledger.Currencies, value.Currency)
+		l.ledger.Currencies = append(l.ledger.Currencies, value.Currency)
 	}
 done2:
 	var sign int64 = 1

@@ -14,7 +14,7 @@ type Connection interface {
 	Close() error
 
 	// Refresh loads again (if needed) all the accounting data
-	Refresh(ledger *Ledger)
+	Refresh()
 }
 
 // ConnExtra contains some extra methods that Conn could support.
