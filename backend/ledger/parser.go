@@ -125,11 +125,9 @@ func (s *Scanner) Line() ScannerLine {
 	return line
 }
 
-func addComment(old *string, new string) {
-	if *old == "" {
-		*old = new
-	} else {
-		*old += "\n" + new
+func addComment(comments *[]string, new string) {
+	if new != "" {
+		*comments = append(*comments, new)
 	}
 }
 
@@ -144,6 +142,7 @@ func (l *ledgerConnection) readJournal() error {
 	s.NewFile(l.file)
 
 	lastLine := lineNone
+	lastTime := time.Time{}
 	for {
 		line := s.Line()
 		if line.Err != nil {
@@ -171,15 +170,15 @@ func (l *ledgerConnection) readJournal() error {
 			} else {
 				switch lastLine {
 				case lineAccount:
-					addComment(&l.ledger.Accounts[len(l.ledger.Accounts)-1].Comment, comment)
+					addComment(&l.ledger.Accounts[len(l.ledger.Accounts)-1].Comments, comment)
 				case lineCommodity:
-					addComment(&l.ledger.Currencies[len(l.ledger.Currencies)-1].Comment, comment)
+					addComment(&l.ledger.Currencies[len(l.ledger.Currencies)-1].Comments, comment)
 				case linePrice:
-					addComment(&l.ledger.Prices[len(l.ledger.Prices)-1].Comment, comment)
+					addComment(&l.ledger.Prices[len(l.ledger.Prices)-1].Comments, comment)
 				case lineTransaction:
-					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Comment, comment)
+					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Comments, comment)
 				case lineSplit:
-					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits[len(l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits)-1].Comment, comment)
+					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits[len(l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits)-1].Comments, comment)
 				default:
 					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 				}
@@ -206,22 +205,6 @@ func (l *ledgerConnection) readJournal() error {
 			}
 			continue
 		}
-		if !indented {
-			date, err := getDate(word)
-			if err == nil {
-				var transaction accounting.Transaction
-				transaction.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
-				transaction.Time = date
-				transaction.Description = rest
-				transaction.Comment = comment
-				if len(l.ledger.Transactions) > 1 && l.ledger.Transactions[len(l.ledger.Transactions)-1].Time.After(date) {
-					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
-				}
-				l.ledger.Transactions = append(l.ledger.Transactions, &transaction)
-				lastLine = lineTransaction
-				continue
-			}
-		}
 		if !indented && word == "P" {
 			var price accounting.Price
 			var err error
@@ -232,11 +215,15 @@ func (l *ledgerConnection) readJournal() error {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
+			if lastTime.After(price.Time) {
+				log.Fatalf("%s:%d: price is not chronologically sorted", line.Filename, line.LineNum)
+			}
+			lastTime = price.Time
 			currency, rest := firstWord(rest)
 			price.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 			price.Currency = l.ledger.GetCurrency(currency)
 			price.Value, err = l.getValue(rest)
-			price.Comment = comment
+			addComment(&price.Comments, comment)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
@@ -265,7 +252,29 @@ func (l *ledgerConnection) readJournal() error {
 			continue
 		}
 		if !indented && word == "account" {
+			// TODO implement this!
 			lastLine = lineAccount
+			_, new := l.getAccount(rest)
+			if new == false {
+				log.Fatalf("%s:%d: account already defined", line.Filename, line.LineNum)
+			}
+		}
+		if !indented {
+			date, err := getDate(word)
+			if err == nil {
+				if lastTime.After(date) {
+					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
+				}
+				lastTime = date
+				var transaction accounting.Transaction
+				transaction.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
+				transaction.Time = date
+				transaction.Description = rest
+				addComment(&transaction.Comments, comment)
+				l.ledger.Transactions = append(l.ledger.Transactions, &transaction)
+				lastLine = lineTransaction
+				continue
+			}
 		}
 		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {
 			// split
@@ -276,7 +285,11 @@ func (l *ledgerConnection) readJournal() error {
 			i := strings.Index(text, "  ")
 			if i > 0 {
 				var err error
-				s.Account = l.getAccount(text[:i])
+				var newAccount bool
+				s.Account, newAccount = l.getAccount(text[:i])
+				if newAccount == true {
+					log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
+				}
 				j := strings.Index(text[i:], "@")
 				if j > 0 {
 					s.Value, err = l.getValue(strings.TrimSpace(text[i : i+j]))
@@ -315,7 +328,11 @@ func (l *ledgerConnection) readJournal() error {
 					}
 				}
 			} else {
-				s.Account = l.getAccount(text)
+				var newAccount bool
+				s.Account, newAccount = l.getAccount(text)
+				if newAccount == true {
+					log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
+				}
 			}
 			t.Splits = append(t.Splits, s)
 			lastLine = lineSplit
@@ -332,17 +349,23 @@ func (l *ledgerConnection) readJournal() error {
 	return nil
 }
 
-func (l *ledgerConnection) getAccount(s string) *accounting.Account {
+func (l *ledgerConnection) getAccount(s string) (acc *accounting.Account, new bool) {
 	for i := range l.ledger.Accounts {
-		if s == l.ledger.Accounts[i].Name {
-			return l.ledger.Accounts[i]
+		if s == l.ledger.Accounts[i].FullName() {
+			return l.ledger.Accounts[i], false
 		}
+	}
+	var parent *accounting.Account
+	if i := strings.LastIndexByte(s, ':'); i > -1 {
+		parent, _ = l.getAccount(s[:i])
+		s = s[i+1:]
 	}
 	var account accounting.Account
 	// account.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 	account.Name = s
+	account.Parent = parent
 	l.ledger.Accounts = append(l.ledger.Accounts, &account)
-	return &account
+	return &account, true
 }
 
 func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
@@ -358,8 +381,8 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 		for i, c := range s {
 			if !strings.ContainsRune("-+0123456789.,_'", c) {
 				sAmount = s[:i]
-				if unicode.IsSpace(c) {
-					value.Currency.PrintSpace = true
+				if !unicode.IsSpace(c) {
+					value.Currency.WithoutSpace = true
 				}
 				value.Currency.Name = strings.TrimSpace(s[i:])
 				goto done
@@ -371,8 +394,8 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 		value.Currency.PrintBefore = true
 		for i := len(s) - 1; i >= 0; i-- {
 			if !strings.ContainsRune("-+0123456789.,_", rune(s[i])) {
-				if unicode.IsSpace(rune(s[i])) {
-					value.Currency.PrintSpace = true
+				if !unicode.IsSpace(rune(s[i])) {
+					value.Currency.WithoutSpace = true
 				}
 				sAmount = s[i+1:]
 				value.Currency.Name = strings.TrimSpace(s[0 : i+1])
@@ -497,6 +520,13 @@ done2:
 		value.Amount *= 10
 	}
 	value.Amount *= sign
+	if value.Currency.Decimal == "" {
+		if value.Currency.Thousand != "." {
+			value.Currency.Decimal = "."
+		} else {
+			value.Currency.Decimal = ","
+		}
+	}
 	return value, nil
 }
 

@@ -12,7 +12,7 @@ type Ledger struct {
 	Transactions []*Transaction
 	Currencies   []*Currency
 	Prices       []Price
-	AccountMap   map[string]*Account
+	AccountMap   map[string]*Account // not really necessary...
 }
 
 // ID is used to identify one currency, account, transaction or price.
@@ -25,14 +25,14 @@ type ID interface {
 //
 // For more ideas on Currency, see github.com/leekchan/accounting
 type Currency struct {
-	ID          ID     // used to identify this currency
-	Name        string // "EUR", "USD", etc
-	PrintBefore bool   // "$1.00" vs "1.00$"
-	PrintSpace  bool   // "1.00EUR" vs "1.00 EUR"
-	Thousand    string // What to use (if any) every 3 digits
-	Decimal     string // decimal separator ("." if empty)
-	Precision   int    // Number of decimal places to show
-	Comment     string
+	ID           ID     // used to identify this currency
+	Name         string // "EUR", "USD", etc
+	PrintBefore  bool   // "$1.00" vs "1.00$"
+	WithoutSpace bool   // "1.00EUR" vs "1.00 EUR"
+	Thousand     string // What to use (if any) every 3 digits
+	Decimal      string // decimal separator ("." if empty)
+	Precision    int    // Number of decimal places to show
+	Comments     []string
 }
 
 // Value specifies an amount and its currency
@@ -46,12 +46,12 @@ type Balance map[*Currency]int64
 
 // Account specifies one origin or destination of funds.
 type Account struct {
-	ID      ID       // used to identify this account.
-	Parent  *Account // Optional
-	Name    string   // Common (short) name (ie, "Cash")
-	Code    string   // Optional. For example, account number
-	Comment string   // Optional
-	Splits  []*Split // List of movements in this account
+	ID       ID       // used to identify this account.
+	Parent   *Account // Optional
+	Name     string   // Common (short) name (ie, "Cash")
+	Code     string   // Optional. For example, account number
+	Comments []string // Optional
+	Splits   []*Split // List of movements in this account
 }
 
 // Split is a deposit or withdrawal from an account.
@@ -63,7 +63,7 @@ type Split struct {
 	EqValue     *Value       // Price of this value, in another currency
 	Balance     Balance      // Balance of this account, after this movement
 	Time        *time.Time   // In most cases, this is equal to Transaction.Time
-	Comment     string       // Split comment (if any)
+	Comments    []string     // Split comments (if any)
 }
 
 // Price declares a market price, which is an exchange rate between
@@ -73,7 +73,7 @@ type Price struct {
 	Time     time.Time
 	Currency *Currency
 	Value    Value
-	Comment  string
+	Comments []string
 }
 
 // A Tag is a label which can be added to a transaction or movement.
@@ -88,7 +88,7 @@ type Transaction struct {
 	ID          ID        // used to identify this transaction.
 	Time        time.Time // Date and time
 	Description string    // Short description
-	Comment     string    // Transaction comment (optional)
+	Comments    []string  // Transaction comment (optional)
 	Tags        []Tag     // Transaction tags (optional)
 	Splits      []*Split  // List of movements
 }

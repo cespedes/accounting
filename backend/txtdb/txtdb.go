@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/url"
@@ -162,7 +163,6 @@ func (c *conn) read() error {
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
-			log.Printf("TR: %s %s", tr.Time.Format("2006-01-02"), tr.Description)
 			c.ledger.Transactions = append(c.ledger.Transactions, tr)
 			tr = nil
 			nextID++
@@ -190,4 +190,8 @@ func (c *conn) read() error {
 
 func init() {
 	accounting.Register("txtdb", driver{})
+}
+
+func (c *conn) Display(out io.Writer) {
+	// TODO FIXME XXX: notifier
 }

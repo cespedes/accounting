@@ -1,6 +1,9 @@
 package accounting
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 // Driver is the interface that must be implemented by the
 // accounting backend.
@@ -10,11 +13,14 @@ type Driver interface {
 
 // Connection is a connection to an accounting backend.
 type Connection interface {
-	// Close flushes, if necessary, and closes the connection
+	// Close flushes, if necessary, and closes the connection.
 	Close() error
 
 	// Refresh loads again (if needed) all the accounting data
 	Refresh()
+
+	// Export the ledger data.
+	Display(out io.Writer)
 }
 
 // ConnExtra contains some extra methods that Conn could support.

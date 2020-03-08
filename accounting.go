@@ -3,6 +3,7 @@ package accounting
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/url"
 	"sort"
@@ -61,9 +62,7 @@ func Register(name string, driver Driver) {
 	drivers[name] = driver
 }
 
-// String returns a string with the correct
-// representation of that value, including its currency.
-func (value Value) String() string {
+func (value Value) getString(full bool) string {
 	var result string
 	var c Currency
 
@@ -72,7 +71,7 @@ func (value Value) String() string {
 	}
 	if c.PrintBefore {
 		result += c.Name
-		if c.PrintSpace {
+		if !c.WithoutSpace {
 			result += " "
 		}
 	}
@@ -82,7 +81,7 @@ func (value Value) String() string {
 	}
 	i := value.Amount / 100_000_000
 	d := value.Amount % 100_000_000
-	if c.Decimal == "" {
+	if c.Decimal == "" { // shouldn't happen
 		c.Decimal = "."
 	}
 	integer := fmt.Sprintf("%d", i)
@@ -95,24 +94,47 @@ func (value Value) String() string {
 		if start < 0 {
 			start = 0
 		}
-		// result += fmt.Sprintf("[%d,%d]", start, end)
 		result += integer[start:end]
 	}
 	if c.Precision < 0 || c.Precision > 8 {
 		panic(fmt.Sprintf("Money: invalid precision %d", c.Precision))
 	}
-	if c.Precision > 0 {
+	if c.Precision > 0 || (full && d > 0) {
 		result += c.Decimal
-		result += fmt.Sprintf("%08d", d)[:c.Precision]
+		precision := c.Precision
+		digits := fmt.Sprintf("%08d", d)
+		if full {
+			for i := 7; i >= precision; i-- {
+				if digits[i] != '0' {
+					precision = i + 1
+					break
+				}
+			}
+		}
+		result += digits[:precision]
 	}
 	if !c.PrintBefore {
-		if c.PrintSpace {
+		if !c.WithoutSpace {
 			result += " "
 		}
 		result += c.Name
 	}
 
 	return result
+}
+
+// String returns a string with the correct
+// representation of that value, including its currency.
+// The amount is represented with just the default digits in the currency definition.
+func (value Value) String() string {
+	return value.getString(false)
+}
+
+// FullString returns a string with the correct
+// representation of that value, including its currency.
+// The amount is represented with all the relevant digits.
+func (value Value) FullString() string {
+	return value.getString(true)
 }
 
 // String returns "0" for empty balances, or a list of its values separated by commas.
@@ -358,7 +380,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 		var price Price
 		var i *big.Int
 		price.Time = transaction.Time
-		price.Comment = `automatic`
+		price.Comments = []string{"automatic"}
 		price.Currency = values[0].Currency
 		i = big.NewInt(-U)
 		i.Mul(i, big.NewInt(values[1].Amount))
@@ -391,4 +413,8 @@ func (l *Ledger) GetCurrency(s string) *Currency {
 	currency.Name = s
 	l.Currencies = append(l.Currencies, &currency)
 	return &currency
+}
+
+func (l *Ledger) Display(out io.Writer) {
+	l.connection.Display(out)
 }
