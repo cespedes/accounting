@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"time"
 
 	"github.com/cespedes/accounting"
 )
@@ -68,43 +69,58 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 			fmt.Fprintf(out, "\t; %s\n", c)
 		}
 	}
-	fmt.Fprintln(out, "\n; Transactions:")
-	for _, t := range ledger.Transactions {
-		comment := ""
-		if len(t.Comments) > 0 {
-			comment = " ; " + t.Comments[0]
-			t.Comments = t.Comments[1:]
+	fmt.Fprintln(out, "\n; Transactions and prices:")
+	var i, j int
+	for i < len(ledger.Transactions) || j < len(ledger.Prices) {
+		var t *accounting.Transaction
+		var p *accounting.Price
+		var tt, tp time.Time
+		if i < len(ledger.Transactions) {
+			t = ledger.Transactions[i]
+			tt = t.Time
 		}
-		fmt.Fprintf(out, "%s %s%s\n", t.Time.Format("2006-01-02"), t.Description, comment)
-		for _, c := range t.Comments {
-			fmt.Fprintf(out, "\t; %s\n", c)
+		if j < len(ledger.Prices) {
+			p = &ledger.Prices[j]
+			tp = p.Time
 		}
-		for _, s := range t.Splits {
-			comment = ""
-			if len(s.Comments) > 0 {
-				comment = " ; " + s.Comments[0]
-				s.Comments = s.Comments[1:]
+		// fmt.Fprintf(out, "DEBUG: i=%d j=%d tt=%v tp=%v\n", i, j, tt, tp)
+		if p == nil || (t != nil && !tt.After(tp)) {
+			i++
+			comment := ""
+			if len(t.Comments) > 0 {
+				comment = " ; " + t.Comments[0]
+				t.Comments = t.Comments[1:]
 			}
-			fmt.Fprintf(out, "  %-50s %s", s.Account.FullName(), s.Value.FullString())
-			for _, c := range s.Comments {
+			fmt.Fprintf(out, "%s %s%s\n", t.Time.Format("2006-01-02/15:04"), t.Description, comment)
+			for _, c := range t.Comments {
 				fmt.Fprintf(out, "\t; %s\n", c)
 			}
-			if s.EqValue != nil {
-				fmt.Fprintf(out, " @@ %s", s.EqValue.FullString())
+			for _, s := range t.Splits {
+				comment = ""
+				if len(s.Comments) > 0 {
+					comment = " ; " + s.Comments[0]
+					s.Comments = s.Comments[1:]
+				}
+				fmt.Fprintf(out, "  %-50s %s", s.Account.FullName(), s.Value.FullString())
+				for _, c := range s.Comments {
+					fmt.Fprintf(out, "\t; %s\n", c)
+				}
+				if s.EqValue != nil {
+					fmt.Fprintf(out, " @@ %s", s.EqValue.FullString())
+				}
+				fmt.Fprintf(out, "%s\n", comment)
 			}
-			fmt.Fprintf(out, "%s\n", comment)
-		}
-	}
-	fmt.Fprintln(out, "")
-	for _, p := range ledger.Prices {
-		comment := ""
-		if len(p.Comments) > 0 {
-			comment = " ; " + p.Comments[0]
-			p.Comments = p.Comments[1:]
-		}
-		fmt.Fprintf(out, "P %s %s %s%s\n", p.Time.Format("2006-01-02"), p.Currency.Name, p.Value.FullString(), comment)
-		for _, c := range p.Comments {
-			fmt.Fprintf(out, "\t; %s\n", c)
+		} else {
+			j++
+			comment := ""
+			if len(p.Comments) > 0 {
+				comment = " ; " + p.Comments[0]
+				p.Comments = p.Comments[1:]
+			}
+			fmt.Fprintf(out, "P %s %s %s%s\n", p.Time.Format("2006-01-02/15:04"), p.Currency.Name, p.Value.FullString(), comment)
+			for _, c := range p.Comments {
+				fmt.Fprintf(out, "\t; %s\n", c)
+			}
 		}
 	}
 }
