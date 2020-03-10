@@ -14,24 +14,17 @@ import (
 )
 
 func tableAccounts(l *accounting.Ledger) {
-	accounts := l.Accounts
-
 	t := tableview.NewTableView()
-	t.FillTable([]string{"id", "account", "balance"}, [][]string{})
-	t.SetExpansion(1, 1)
-	for i, ac := range accounts {
+	t.FillTable([]string{"account", "balance"}, [][]string{})
+	t.SetExpansion(0, 1)
+	for i, ac := range l.Accounts {
 		// t.SetCell(i, 0, strconv.Itoa(ac.ID))
-		t.SetAlign(0, tableview.AlignRight)
-		t.SetCell(i, 1, ac.FullName())
-		t.SetAlign(2, tableview.AlignRight)
-		var balance accounting.Value
-		for _, a := range (l.GetBalance(ac.ID, time.Time{})) {
-			balance.Amount += a
-		}
-		t.SetCell(i, 2, balance.String())
+		t.SetCell(i, 0, ac.FullName())
+		t.SetAlign(1, tableview.AlignRight)
+		t.SetCell(i, 1, l.GetBalance(ac, time.Time{}).String())
 	}
 	t.SetSelectedFunc(func(row int) {
-		tableTransactions(l, accounts[row-1].ID)
+		tableTransactions(l, l.Accounts[row-1].ID)
 	})
 	t.Run()
 }

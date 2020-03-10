@@ -39,15 +39,15 @@ func Open(dataSource string) (*Ledger, error) {
 	if drivers[backend] == nil {
 		return nil, errors.New("accounting.Open: Backend " + backend + " is not registered.")
 	}
-	l := new(Ledger)
-	backendLedger := new(BackendLedger)
-	backendLedger.ledger = l
-	l.connection, err = drivers[backend].Open(dataSource, l, backendLedger)
+	b := new(Backend)
+	b.ready = true
+	b.Ledger = new(Ledger)
+	b.Ledger.connection, err = drivers[backend].Open(dataSource, b)
 	if err != nil {
 		return nil, err
 	}
 
-	return l, nil
+	return b.Ledger, nil
 }
 
 // Register makes an accounting backend available by the provided name.
@@ -193,27 +193,19 @@ func (a Account) FullName() string {
 
 // GetBalance gets an account balance at a given time.
 // If passed the zero value, it gets the current balance.
-func (l *Ledger) GetBalance(account ID, when time.Time) Balance {
-	// TODO rewrite...
-	x, ok := l.connection.(interface {
-		GetBalance(ID, time.Time) Balance
-	})
-	if ok {
-		return x.GetBalance(account, when)
+func (l *Ledger) GetBalance(account *Account, when time.Time) Balance {
+	if len(account.Splits) == 0 {
+		return nil
 	}
-	balance := make(Balance)
-	for _, t := range l.TransactionsInAccount(account) {
-		if (when != time.Time{}) && t.Time.After(when) {
-			continue
-		}
-
-		for _, s := range t.Splits {
-			if s.Account.ID == account {
-				balance[s.Value.Currency] += s.Value.Amount
-			}
+	if (when == time.Time{}) {
+		return account.Splits[len(account.Splits)-1].Balance
+	}
+	for i := 1; i < len(account.Splits); i++ {
+		if account.Splits[i].Time.After(when) {
+			return account.Splits[i-1].Balance
 		}
 	}
-	return balance
+	return account.Splits[len(account.Splits)-1].Balance
 }
 
 // TransactionsInAccount gets the list of all the transactions

@@ -19,6 +19,7 @@ type ID int
 type conn struct {
 	db      *sql.DB
 	updated time.Time
+	backend *accounting.Backend
 	ledger  *accounting.Ledger
 }
 
@@ -32,7 +33,7 @@ func init() {
 
 const refreshTimeout = 5 * time.Second
 
-func (driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
+func (driver) Open(name string, backend *accounting.Backend) (accounting.Connection, error) {
 	db, err := sql.Open("postgres", name)
 	if err != nil {
 		return nil, errors.New("psql.Open: " + err.Error())
@@ -43,8 +44,10 @@ func (driver) Open(name string, ledger *accounting.Ledger, _ *accounting.Backend
 	// TODO I should check the SQL schema...
 	conn := new(conn)
 	conn.db = db
-	getAccounts(conn, ledger)
-	getTransactions(conn, ledger)
+	conn.backend = backend
+	conn.ledger = backend.Ledger
+	getAccounts(conn)
+	getTransactions(conn)
 	return conn, nil
 }
 
@@ -56,7 +59,8 @@ func (c *conn) Close() error {
 	return c.db.Close()
 }
 
-func getAccounts(c *conn, ledger *accounting.Ledger) {
+func getAccounts(c *conn) {
+	ledger := c.ledger
 	query := `
 		SELECT a.id, a.name, COALESCE(a.code, '') AS code,
 			COALESCE((100*sum(s.value))::integer, 0) AS balance
@@ -87,7 +91,8 @@ func getAccounts(c *conn, ledger *accounting.Ledger) {
 	}
 }
 
-func getTransactions(c *conn, ledger *accounting.Ledger) {
+func getTransactions(c *conn) {
+	ledger := c.ledger
 	idAccount := make(map[accounting.ID]*accounting.Account)
 	for i, a := range ledger.Accounts {
 		idAccount[a.ID] = ledger.Accounts[i]

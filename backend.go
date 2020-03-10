@@ -8,10 +8,11 @@ import (
 // Driver is the interface that must be implemented by the
 // accounting backend.
 type Driver interface {
-	Open(url string, ledger *Ledger, backend *BackendLedger) (Connection, error)
+	Open(url string, backend *Backend) (Connection, error)
 }
 
 // Connection is a connection to an accounting backend.
+// It should use the Backend.Ledger which was sent to Driver.Open()
 type Connection interface {
 	// Close flushes, if necessary, and closes the connection.
 	Close() error
@@ -23,19 +24,20 @@ type Connection interface {
 	Display(out io.Writer)
 }
 
-// BackendLedger contains some methods to be called only by the backends.
-type BackendLedger struct {
-	ledger *Ledger
+// Backend contains the Ledger and some methods to be called only by the backends.
+type Backend struct {
+	ready  bool
+	Ledger *Ledger
 }
 
 // NewTransaction adds a new transaction to the ledger, updating
 // the ledger's Accounts and Transactions fields.
 // It also runs some sanity checks.
-func (b *BackendLedger) NewTransaction(t *Transaction) {
+func (b *Backend) NewTransaction(t *Transaction) {
 	// TODO: only chronologically sorted transactions
 	//       and splits are supported right now.
-	b.ledger.balanceTransaction(t)
-	b.ledger.Transactions = append(b.ledger.Transactions, t)
+	b.Ledger.balanceTransaction(t)
+	b.Ledger.Transactions = append(b.Ledger.Transactions, t)
 	for _, s := range t.Splits {
 		s.Balance = make(Balance)
 		if len(s.Account.Splits) > 0 {

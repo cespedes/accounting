@@ -258,6 +258,7 @@ func (l *ledgerConnection) readJournal() error {
 			if new == false {
 				log.Fatalf("%s:%d: account already defined", line.Filename, line.LineNum)
 			}
+			continue
 		}
 		if !indented {
 			date, err := getDate(word)

@@ -18,17 +18,19 @@ func init() {
 type ledgerConnection struct {
 	file            string
 	defaultCurrency *accounting.Currency
+	backend         *accounting.Backend
 	ledger          *accounting.Ledger
 }
 
-func (driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
+func (driver) Open(name string, backend *accounting.Backend) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
 	}
 	conn := new(ledgerConnection)
 	conn.file = url.Path
-	conn.ledger = ledger
+	conn.backend = backend
+	conn.ledger = backend.Ledger
 	conn.readJournal()
 	return conn, nil
 }
@@ -101,7 +103,7 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 					comment = " ; " + s.Comments[0]
 					s.Comments = s.Comments[1:]
 				}
-				fmt.Fprintf(out, "  %-50s %s", s.Account.FullName(), s.Value.FullString())
+				fmt.Fprintf(out, "  %-50s  %s", s.Account.FullName(), s.Value.FullString())
 				for _, c := range s.Comments {
 					fmt.Fprintf(out, "\t; %s\n", c)
 				}

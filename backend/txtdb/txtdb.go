@@ -24,6 +24,7 @@ const refreshTimeout = 5 * time.Second
 
 type conn struct {
 	dir        string
+	backend    *accounting.Backend
 	ledger     *accounting.Ledger
 	accountMap map[int]*accounting.Account
 	currency   accounting.Currency // just one currency for now
@@ -36,7 +37,7 @@ func (id ID) String() string {
 }
 
 // Opens a connection to a txtdb database
-func (p driver) Open(name string, ledger *accounting.Ledger, _ *accounting.BackendLedger) (accounting.Connection, error) {
+func (p driver) Open(name string, backend *accounting.Backend) (accounting.Connection, error) {
 	url, err := url.Parse(name)
 	if err != nil {
 		return nil, err
@@ -45,7 +46,8 @@ func (p driver) Open(name string, ledger *accounting.Ledger, _ *accounting.Backe
 	conn.dir = url.Path
 	conn.accountMap = make(map[int]*accounting.Account)
 	conn.currency.Precision = 2
-	conn.ledger = ledger
+	conn.backend = backend
+	conn.ledger = backend.Ledger
 
 	err = conn.read()
 	return conn, err
@@ -101,6 +103,7 @@ func (c *conn) read() error {
 	nextID := 1
 	var balance int64
 	var tr *accounting.Transaction
+	var oldTime, thisTime time.Time
 	for i := 1; sc.Scan(); i++ {
 		if tr == nil {
 			tr = new(accounting.Transaction)
@@ -120,19 +123,28 @@ func (c *conn) read() error {
 			}
 			continue
 		}
+		thisTime, err = time.Parse("2006-01-02 15.04", strings.TrimSpace(fields[1]))
+		if err != nil {
+			thisTime, err = time.Parse("2006-01-02", strings.TrimSpace(fields[1]))
+		}
+		if err != nil {
+			log.Printf("transactions line %d: datetime error (%s)\n", i, strings.TrimSpace(fields[1]))
+			continue
+		}
+		if oldTime.After(thisTime) {
+			log.Printf("transactions line %d: datetime not sorted\n", i)
+		}
 		if tr.ID == nil { // Fill tr only if it is not already filled
 			// First field (used to be "id") is ignored
 			tr.ID = ID(nextID)
-			tr.Time, err = time.Parse("2006-01-02 15.04", strings.TrimSpace(fields[1]))
-			if err != nil {
-				tr.Time, err = time.Parse("2006-01-02", strings.TrimSpace(fields[1]))
-			}
-			if err != nil {
-				log.Printf("transactions line %d: datetime error (%s)\n", i, strings.TrimSpace(fields[1]))
-				continue
-			}
+			tr.Time = thisTime
 			tr.Description = fields[2]
+		} else {
+			if oldTime != thisTime {
+				log.Printf("transactions line %d: same transaction, different datetime\n", i)
+			}
 		}
+		oldTime = thisTime
 		accountID, err := strconv.Atoi(fields[4])
 		if err != nil {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
@@ -163,7 +175,7 @@ func (c *conn) read() error {
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
 		if balance == 0 {
-			c.ledger.Transactions = append(c.ledger.Transactions, tr)
+			c.backend.NewTransaction(tr)
 			tr = nil
 			nextID++
 		}
