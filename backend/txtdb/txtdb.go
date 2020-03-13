@@ -180,7 +180,7 @@ func (c *conn) read() error {
 			nextID++
 		}
 	}
-	sort.Slice(c.ledger.Transactions, func(i, j int) bool {
+	sort.SliceStable(c.ledger.Transactions, func(i, j int) bool {
 		if c.ledger.Transactions[i].Time == c.ledger.Transactions[j].Time {
 			return i < j
 		}
