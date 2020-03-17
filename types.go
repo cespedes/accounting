@@ -9,9 +9,15 @@ const U = 100_000_000
 type Ledger struct {
 	connection   Connection
 	Accounts     []*Account
-	Transactions []*Transaction
-	Currencies   []*Currency
-	Prices       []Price
+	Transactions []*Transaction           // sorted by Time.
+	Currencies   []*Currency              // can be empty.
+	Prices       []*Price                 // can be empty; sorted by Time.
+	Comments     map[interface{}][]string // Comments in Accounts, Transactions, Currencies or Prices.
+	Assertions   map[*Split]Value         // Value that should be in an account after one split.
+	SplitPrices  map[*Split]Value         // Price for the value in a split, in another currency.
+	// SplitTotalPrice map[*Split]Value         // Price for the total value in a given split.
+	// Tags            map[interface{}][]Tag
+	// TagsByName      map[string][]struct {Value string; Place interface{}}
 }
 
 // ID is used to identify one currency, account, transaction or price.
@@ -31,7 +37,6 @@ type Currency struct {
 	Thousand     string // What to use (if any) every 3 digits
 	Decimal      string // decimal separator ("." if empty)
 	Precision    int    // Number of decimal places to show
-	Comments     []string
 }
 
 // Value specifies an amount and its currency
@@ -41,16 +46,24 @@ type Value struct {
 }
 
 // Balance is a list of currencies and amounts.
-type Balance map[*Currency]int64
+type Balance []Value
 
 // Account specifies one origin or destination of funds.
 type Account struct {
-	ID       ID       // used to identify this account.
-	Parent   *Account // Optional
-	Name     string   // Common (short) name (ie, "Cash")
-	Code     string   // Optional. For example, account number
-	Comments []string // Optional
-	Splits   []*Split // List of movements in this account
+	ID     ID       // used to identify this account.
+	Parent *Account // Optional
+	Name   string   // Common (short) name (ie, "Cash")
+	Code   string   // Optional. For example, account number
+	Splits []*Split // List of movements in this account
+}
+
+// Transaction stores an entry in the journal, consisting in a timestamp,
+// a description and two or more money movements from different accounts.
+type Transaction struct {
+	ID          ID        // used to identify this transaction.
+	Time        time.Time // Date and time
+	Description string    // Short description
+	Splits      []*Split  // List of movements
 }
 
 // Split is a deposit or withdrawal from an account.
@@ -58,12 +71,9 @@ type Split struct {
 	ID          ID           // used to identify this split.
 	Account     *Account     // Origin or destination of funds.
 	Transaction *Transaction // Transaction this split belongs to.
-	Value       Value        // Amount to be transferred.
-	EqValue     *Value       // Price of this value, in another currency.
-	Balance     Balance      // Balance of this account, after this movement.
-	Assertion   Balance      // What part of the balance should be.
 	Time        *time.Time   // In most cases, this is equal to Transaction.Time
-	Comments    []string     // Split comments (if any)
+	Value       Value        // Amount to be transferred.
+	Balance     Balance      // Balance of this account, after this movement.
 }
 
 // Price declares a market price, which is an exchange rate between
@@ -73,22 +83,10 @@ type Price struct {
 	Time     time.Time
 	Currency *Currency
 	Value    Value
-	Comments []string
 }
 
 // A Tag is a label which can be added to a transaction or movement.
 type Tag struct {
 	Name  string
 	Value string
-}
-
-// Transaction stores an entry in the journal, consisting in a timestamp,
-// a description and two or more money movements from different accounts.
-type Transaction struct {
-	ID          ID        // used to identify this transaction.
-	Time        time.Time // Date and time
-	Description string    // Short description
-	Comments    []string  // Transaction comment (optional)
-	Tags        []Tag     // Transaction tags (optional)
-	Splits      []*Split  // List of movements
 }

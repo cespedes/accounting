@@ -145,8 +145,7 @@ func (b Balance) String() string {
 		return "0"
 	}
 	var s string
-	for c, a := range b {
-		var v = Value{Amount: a, Currency: c}
+	for _, v := range b {
 		if s != "" {
 			s += ", "
 		}
@@ -323,7 +322,7 @@ func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
 
 func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 	var unbalancedSplit *Split
-	balance := make(Balance)
+	var balance Balance
 	for i, s := range transaction.Splits {
 		if s.Value.Currency == nil {
 			if unbalancedSplit != nil {
@@ -332,15 +331,16 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 			unbalancedSplit = transaction.Splits[i]
 			continue
 		}
-		if s.EqValue != nil {
-			balance[s.EqValue.Currency] += s.EqValue.Amount
+		if v, ok := l.SplitPrices[s]; ok == true {
+			balance.Add(v)
 		} else {
-			balance[s.Value.Currency] += s.Value.Amount
+			balance.Add(s.Value)
 		}
 	}
-	for c, a := range balance {
-		if a == 0 {
-			delete(balance, c)
+	for i := 0; i < len(balance); i++ {
+		for i < len(balance) && balance[i].Amount == 0 {
+			balance[i] = balance[len(balance)-1]
+			balance = balance[:len(balance)-1]
 		}
 	}
 	if len(balance) == 0 {
@@ -348,50 +348,35 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 		return nil
 	}
 	if unbalancedSplit != nil && len(balance) == 1 {
-		for c, a := range balance {
-			unbalancedSplit.Value.Currency = c
-			unbalancedSplit.Value.Amount = -a
-			return nil
-		}
-		panic("balanceTransaction(): assertion failed")
+		unbalancedSplit.Value = balance[0]
+		unbalancedSplit.Value.Amount = -unbalancedSplit.Value.Amount
+		return nil
 	}
 	if unbalancedSplit != nil {
 		return fmt.Errorf("%s: could not balance account %q: two or more currencies in transaction", transaction.ID, unbalancedSplit.Account.FullName())
 	}
 	if len(balance) == 1 {
-		var v Value
-		for c, a := range balance {
-			v.Amount = a
-			v.Currency = c
-		}
-		return fmt.Errorf("%s: could not balance transaction: total amount is %s", transaction.ID, v)
+		return fmt.Errorf("%s: could not balance transaction: total amount is %s", transaction.ID, balance[0])
 	}
 	if len(balance) == 2 {
-		var values []Value
-		for c, a := range balance {
-			var value Value
-			value.Amount = a
-			value.Currency = c
-			values = append(values, value)
-		}
 		// we add 2 automatic prices, converting one currency to another and vice-versa
-		var price Price
+		price := new(Price)
 		var i *big.Int
 		price.Time = transaction.Time
-		price.Comments = []string{"automatic"}
-		price.Currency = values[0].Currency
+		l.Comments[price] = append(l.Comments[price], "automatic")
+		price.Currency = balance[0].Currency
 		i = big.NewInt(-U)
-		i.Mul(i, big.NewInt(values[1].Amount))
-		i.Quo(i, big.NewInt(values[0].Amount))
+		i.Mul(i, big.NewInt(balance[1].Amount))
+		i.Quo(i, big.NewInt(balance[0].Amount))
 		price.Value.Amount = i.Int64()
-		price.Value.Currency = values[1].Currency
+		price.Value.Currency = balance[1].Currency
 		l.Prices = append(l.Prices, price)
-		price.Currency = values[1].Currency
+		price.Currency = balance[1].Currency
 		i = big.NewInt(-U)
-		i.Mul(i, big.NewInt(values[0].Amount))
-		i.Quo(i, big.NewInt(values[1].Amount))
+		i.Mul(i, big.NewInt(balance[0].Amount))
+		i.Quo(i, big.NewInt(balance[1].Amount))
 		price.Value.Amount = i.Int64()
-		price.Value.Currency = values[0].Currency
+		price.Value.Currency = balance[0].Currency
 		l.Prices = append(l.Prices, price)
 		return nil
 	}
@@ -415,4 +400,24 @@ func (l *Ledger) GetCurrency(s string) *Currency {
 
 func (l *Ledger) Display(out io.Writer) {
 	l.connection.Display(out)
+}
+
+// Add adds a value to a balance.
+func (b *Balance) Add(v Value) {
+	for i := range *b {
+		if (*b)[i].Currency == v.Currency {
+			(*b)[i].Amount += v.Amount
+			return
+		}
+	}
+	*b = append(*b, v)
+}
+
+// Dup duplicates a Balance.
+func (b Balance) Dup() Balance {
+	res := Balance{}
+	for _, v := range b {
+		res.Add(v)
+	}
+	return res
 }

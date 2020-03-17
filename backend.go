@@ -33,19 +33,24 @@ type Backend struct {
 // NewTransaction adds a new transaction to the ledger, updating
 // the ledger's Accounts and Transactions fields.
 // It also runs some sanity checks.
-func (b *Backend) NewTransaction(t *Transaction) {
-	// TODO: only chronologically sorted transactions
-	//       and splits are supported right now.
-	b.Ledger.balanceTransaction(t)
-	b.Ledger.Transactions = append(b.Ledger.Transactions, t)
-	for _, s := range t.Splits {
-		s.Balance = make(Balance)
-		if len(s.Account.Splits) > 0 {
-			s.Balance = s.Account.Splits[len(s.Account.Splits)-1].Balance
+func (b *Backend) NewTransaction(t *Transaction) error {
+	/*
+		// TODO: only chronologically sorted transactions
+		//       and splits are supported right now.
+		if err := b.Ledger.balanceTransaction(t); err != nil {
+			return err
 		}
-		s.Balance[s.Value.Currency] += s.Value.Amount
-		s.Account.Splits = append(s.Account.Splits, s)
-	}
+		b.Ledger.Transactions = append(b.Ledger.Transactions, t)
+		for _, s := range t.Splits {
+			s.Balance = make(Balance)
+			if len(s.Account.Splits) > 0 {
+				s.Balance = s.Account.Splits[len(s.Account.Splits)-1].Balance
+			}
+			s.Balance[s.Value.Currency] += s.Value.Amount
+			s.Account.Splits = append(s.Account.Splits, s)
+		}
+	*/
+	return nil
 }
 
 // ConnExtra contains some extra methods that Conn could support.

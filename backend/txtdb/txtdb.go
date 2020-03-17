@@ -141,7 +141,7 @@ func (c *conn) read() error {
 			tr.Description = fields[2]
 		} else {
 			if oldTime != thisTime {
-				log.Printf("transactions line %d: same transaction, different datetime\n", i)
+				log.Printf("NOTICE: transactions line %d: same transaction, different datetime\n", i)
 			}
 		}
 		oldTime = thisTime
@@ -172,13 +172,28 @@ func (c *conn) read() error {
 		}
 		sp.Value.Currency = &c.currency
 		sp.Value.Amount = sign * int64(math.Round(100*f)) * 1000_000
+		if thisTime == tr.Time {
+			sp.Time = &tr.Time
+		} else {
+			sp.Time = new(time.Time)
+			*sp.Time = thisTime
+		}
 		balance += sp.Value.Amount
 		tr.Splits = append(tr.Splits, sp)
+		sp.Account.Splits = append(sp.Account.Splits, sp)
 		if balance == 0 {
-			c.backend.NewTransaction(tr)
+			c.ledger.Transactions = append(c.ledger.Transactions, tr)
+			/*
+				if err := c.backend.NewTransaction(tr); err != nil {
+					log.Printf("transactions line %d: %v", i, err)
+				}
+			*/
 			tr = nil
 			nextID++
 		}
+	}
+	if balance != 0 {
+		log.Printf("transactions: balance is %d, not zero", balance)
 	}
 	sort.SliceStable(c.ledger.Transactions, func(i, j int) bool {
 		if c.ledger.Transactions[i].Time == c.ledger.Transactions[j].Time {
@@ -186,15 +201,17 @@ func (c *conn) read() error {
 		}
 		return c.ledger.Transactions[i].Time.Before(c.ledger.Transactions[j].Time)
 	})
-	accountBalances := make(map[*accounting.Account]accounting.Balance)
-	for i := range c.ledger.Transactions {
-		for j := range c.ledger.Transactions[i].Splits {
-			s := c.ledger.Transactions[i].Splits[j]
-			if accountBalances[s.Account] == nil {
-				accountBalances[s.Account] = make(accounting.Balance)
+	for a := range c.ledger.Accounts {
+		sort.SliceStable(c.ledger.Accounts[a].Splits, func(i, j int) bool {
+			if c.ledger.Accounts[a].Splits[i].Time == c.ledger.Transactions[a].Splits[j].Time {
+				return i < j
 			}
-			accountBalances[s.Account][s.Value.Currency] += s.Value.Amount
-			s.Balance = accountBalances[s.Account]
+			return c.ledger.Accounts[a].Splits[i].Time.Before(*c.ledger.Accounts[a].Splits[j].Time)
+		})
+		var b accounting.Balance
+		for s := range c.ledger.Accounts[a].Splits {
+			b.Add(c.ledger.Accounts[a].Splits[s].Value)
+			c.ledger.Accounts[a].Splits[s].Balance = b.Dup()
 		}
 	}
 	return nil

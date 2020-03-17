@@ -138,6 +138,9 @@ func (l *ledgerConnection) readJournal() error {
 	l.ledger.Transactions = nil
 	l.ledger.Currencies = nil
 	l.ledger.Prices = nil
+	l.ledger.Comments = make(map[interface{}][]string)
+	l.ledger.Assertions = make(map[*accounting.Split]accounting.Value)
+	l.ledger.SplitPrices = make(map[*accounting.Split]accounting.Value)
 	l.defaultCurrency = nil
 	s := NewScanner()
 	s.NewFile(l.file)
@@ -171,15 +174,21 @@ func (l *ledgerConnection) readJournal() error {
 			} else {
 				switch lastLine {
 				case lineAccount:
-					addComment(&l.ledger.Accounts[len(l.ledger.Accounts)-1].Comments, comment)
+					var account *accounting.Account = l.ledger.Accounts[len(l.ledger.Accounts)-1]
+					l.ledger.Comments[account] = append(l.ledger.Comments[account], comment)
 				case lineCommodity:
-					addComment(&l.ledger.Currencies[len(l.ledger.Currencies)-1].Comments, comment)
+					var currency *accounting.Currency = l.ledger.Currencies[len(l.ledger.Currencies)-1]
+					l.ledger.Comments[currency] = append(l.ledger.Comments[currency], comment)
 				case linePrice:
-					addComment(&l.ledger.Prices[len(l.ledger.Prices)-1].Comments, comment)
+					var price *accounting.Price = l.ledger.Prices[len(l.ledger.Prices)-1]
+					l.ledger.Comments[price] = append(l.ledger.Comments[price], comment)
 				case lineTransaction:
-					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Comments, comment)
+					var transaction *accounting.Transaction = l.ledger.Transactions[len(l.ledger.Transactions)-1]
+					l.ledger.Comments[transaction] = append(l.ledger.Comments[transaction], comment)
 				case lineSplit:
-					addComment(&l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits[len(l.ledger.Transactions[len(l.ledger.Transactions)-1].Splits)-1].Comments, comment)
+					var transaction *accounting.Transaction = l.ledger.Transactions[len(l.ledger.Transactions)-1]
+					var split *accounting.Split = transaction.Splits[len(transaction.Splits)-1]
+					l.ledger.Comments[split] = append(l.ledger.Comments[split], comment)
 				default:
 					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 				}
@@ -224,12 +233,14 @@ func (l *ledgerConnection) readJournal() error {
 			price.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 			price.Currency = l.ledger.GetCurrency(currency)
 			price.Value, err = l.getValue(rest)
-			addComment(&price.Comments, comment)
+			if comment != "" {
+				l.ledger.Comments[&price] = append(l.ledger.Comments[&price], comment)
+			}
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
-			l.ledger.Prices = append(l.ledger.Prices, price)
+			l.ledger.Prices = append(l.ledger.Prices, &price)
 			lastLine = linePrice
 			continue
 		}
@@ -271,7 +282,9 @@ func (l *ledgerConnection) readJournal() error {
 				transaction.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 				transaction.Time = date
 				transaction.Description = rest
-				addComment(&transaction.Comments, comment)
+				if comment != "" {
+					l.ledger.Comments[&transaction] = append(l.ledger.Comments[&transaction], comment)
+				}
 				l.ledger.Transactions = append(l.ledger.Transactions, &transaction)
 				lastLine = lineTransaction
 				continue
@@ -304,23 +317,23 @@ func (l *ledgerConnection) readJournal() error {
 						continue
 					}
 					if text[i+j+1] == '@' {
-						s.EqValue = new(accounting.Value)
-						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+2:]))
+						value, err := l.getValue(strings.TrimSpace(text[i+j+2:]))
 						if err != nil {
 							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 							continue
 						}
+						l.ledger.SplitPrices[s] = value
 					} else {
-						s.EqValue = new(accounting.Value)
-						*s.EqValue, err = l.getValue(strings.TrimSpace(text[i+j+1:]))
+						value, err := l.getValue(strings.TrimSpace(text[i+j+1:]))
 						if err != nil {
 							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 							continue
 						}
 						k := big.NewInt(s.Value.Amount)
-						k.Mul(k, big.NewInt(s.EqValue.Amount))
+						k.Mul(k, big.NewInt(value.Amount))
 						k.Quo(k, big.NewInt(accounting.U))
-						s.EqValue.Amount = k.Int64()
+						value.Amount = k.Int64()
+						l.ledger.SplitPrices[s] = value
 					}
 				} else {
 					s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
