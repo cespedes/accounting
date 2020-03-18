@@ -363,7 +363,6 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 		price := new(Price)
 		var i *big.Int
 		price.Time = transaction.Time
-		l.Comments[price] = append(l.Comments[price], "automatic")
 		price.Currency = balance[0].Currency
 		i = big.NewInt(-U)
 		i.Mul(i, big.NewInt(balance[1].Amount))
@@ -371,6 +370,8 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 		price.Value.Amount = i.Int64()
 		price.Value.Currency = balance[1].Currency
 		l.Prices = append(l.Prices, price)
+		l.Comments[price] = append(l.Comments[price], "automatic")
+		price = new(Price)
 		price.Currency = balance[1].Currency
 		i = big.NewInt(-U)
 		i.Mul(i, big.NewInt(balance[0].Amount))
@@ -378,6 +379,7 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 		price.Value.Amount = i.Int64()
 		price.Value.Currency = balance[0].Currency
 		l.Prices = append(l.Prices, price)
+		l.Comments[price] = append(l.Comments[price], "automatic")
 		return nil
 	}
 	if len(balance) > 2 {

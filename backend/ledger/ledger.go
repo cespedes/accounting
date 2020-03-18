@@ -43,14 +43,15 @@ func (conn *ledgerConnection) Refresh() {
 	// TODO FIXME XXX: notifier
 }
 
+// Display shows the "Ledger" representation of an accounting ledger.
 func Display(out io.Writer, ledger *accounting.Ledger) {
 	fmt.Fprintln(out, "\n; Accounts:")
 	for _, a := range ledger.Accounts {
-		comment := ""
+		fmt.Fprintf(out, "account %s", a.FullName())
 		if len(ledger.Comments[a]) > 0 {
-			comment = " ; " + ledger.Comments[a][0]
+			fmt.Fprintf(out, " ; %s", ledger.Comments[a][0])
 		}
-		fmt.Fprintf(out, "account %s%s\n", a.FullName(), comment)
+		fmt.Fprint(out, "\n")
 		if len(ledger.Comments[a]) > 1 {
 			for _, c := range ledger.Comments[a][1:] {
 				fmt.Fprintf(out, "\t: %s\n", c)
@@ -59,14 +60,14 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 	}
 	fmt.Fprintln(out, "\n; Currencies:")
 	for _, cu := range ledger.Currencies {
-		comment := ""
-		if len(ledger.Comments[cu]) > 0 {
-			comment = " ; " + ledger.Comments[cu][0]
-		}
 		var v accounting.Value
 		v.Amount = 1_000_000 * accounting.U
 		v.Currency = cu
-		fmt.Fprintf(out, "commodity %s%s\n", v.String(), comment)
+		fmt.Fprintf(out, "commodity %s", v.String())
+		if len(ledger.Comments[cu]) > 0 {
+			fmt.Fprintf(out, " ; %s", ledger.Comments[cu][0])
+		}
+		fmt.Fprint(out, "\n")
 		if len(ledger.Comments[cu]) > 1 {
 			for _, c := range ledger.Comments[cu][1:] {
 				fmt.Fprintf(out, "\t; %s\n", c)
@@ -90,39 +91,48 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 		// fmt.Fprintf(out, "DEBUG: i=%d j=%d tt=%v tp=%v\n", i, j, tt, tp)
 		if p == nil || (t != nil && !tt.After(tp)) {
 			i++
-			comment := ""
+			fmt.Fprintf(out, "%s %s", t.Time.Format("2006-01-02/15:04"), t.Description)
 			if len(ledger.Comments[t]) > 0 {
-				comment = " ; " + ledger.Comments[t][0]
+				fmt.Fprintf(out, " ; %s", ledger.Comments[t][0])
 			}
-			fmt.Fprintf(out, "%s %s%s\n", t.Time.Format("2006-01-02/15:04"), t.Description, comment)
+			fmt.Fprint(out, "\n")
 			if len(ledger.Comments[t]) > 1 {
 				for _, c := range ledger.Comments[t][1:] {
 					fmt.Fprintf(out, "\t; %s\n", c)
 				}
 			}
 			for _, s := range t.Splits {
-				comment = ""
-				if len(ledger.Comments[s]) > 0 {
-					comment = " ; " + ledger.Comments[s][0]
-				}
 				fmt.Fprintf(out, "  %-50s  %s", s.Account.FullName(), s.Value.FullString())
-				if len(ledger.Comments[s]) > 1 {
-					for _, c := range ledger.Comments[s][1:] {
-						fmt.Fprintf(out, "\t; %s\n", c)
-					}
-				}
 				if v, ok := ledger.SplitPrices[s]; ok == true {
 					fmt.Fprintf(out, " @@ %s", v.FullString())
 				}
-				fmt.Fprintf(out, "%s\n", comment)
+				if v, ok := ledger.Assertions[s]; ok == true {
+					fmt.Fprintf(out, " = %s", v.FullString())
+				}
+				var comments []string
+				if *s.Time != t.Time {
+					comments = append(comments, "date:"+s.Time.Format("2006-01-02/15:04"))
+				}
+				if len(ledger.Comments[s]) > 0 {
+					comments = append(comments, ledger.Comments[s]...)
+				}
+				if len(comments) > 0 {
+					fmt.Fprintf(out, " ; %s", comments[0])
+				}
+				fmt.Fprint(out, "\n")
+				if len(comments) > 1 {
+					for _, c := range comments[1:] {
+						fmt.Fprintf(out, "\t; %s\n", c)
+					}
+				}
 			}
 		} else {
 			j++
-			comment := ""
+			fmt.Fprintf(out, "P %s %s %s", p.Time.Format("2006-01-02/15:04"), p.Currency.Name, p.Value.FullString())
 			if len(ledger.Comments[p]) > 0 {
-				comment = " ; " + ledger.Comments[p][0]
+				fmt.Fprintf(out, " ; %s", ledger.Comments[p][0])
 			}
-			fmt.Fprintf(out, "P %s %s %s%s\n", p.Time.Format("2006-01-02/15:04"), p.Currency.Name, p.Value.FullString(), comment)
+			fmt.Fprint(out, "\n")
 			if len(ledger.Comments[p]) > 1 {
 				for _, c := range ledger.Comments[p][1:] {
 					fmt.Fprintf(out, "\t; %s\n", c)

@@ -48,6 +48,9 @@ func (p driver) Open(name string, backend *accounting.Backend) (accounting.Conne
 	conn.currency.Precision = 2
 	conn.backend = backend
 	conn.ledger = backend.Ledger
+	conn.ledger.Comments = make(map[interface{}][]string)
+	conn.ledger.SplitPrices = make(map[*accounting.Split]accounting.Value)
+	conn.ledger.Assertions = make(map[*accounting.Split]accounting.Value)
 
 	err = conn.read()
 	return conn, err
@@ -114,15 +117,6 @@ func (c *conn) read() error {
 		if len(fields) != 7 { // badly-formatted line: skip
 			continue
 		}
-		if len(fields[5]) == 0 {
-			if balance != 0 {
-				log.Printf("transactions line %d: no value inside transaction (balance=%d)", i, balance)
-				balance = 0
-				tr = nil
-				continue
-			}
-			continue
-		}
 		thisTime, err = time.Parse("2006-01-02 15.04", strings.TrimSpace(fields[1]))
 		if err != nil {
 			thisTime, err = time.Parse("2006-01-02", strings.TrimSpace(fields[1]))
@@ -156,29 +150,59 @@ func (c *conn) read() error {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
 			continue
 		}
-		var sign int64
-		if fields[5][0] == '+' {
-			sign = 1
-		} else if fields[5][0] == '-' {
-			sign = -1
-		} else {
-			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
-			continue
-		}
-		f, err := strconv.ParseFloat(fields[5][1:], 64)
-		if err != nil {
-			log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
-			continue
-		}
-		sp.Value.Currency = &c.currency
-		sp.Value.Amount = sign * int64(math.Round(100*f)) * 1000_000
 		if thisTime == tr.Time {
 			sp.Time = &tr.Time
 		} else {
 			sp.Time = new(time.Time)
 			*sp.Time = thisTime
 		}
-		balance += sp.Value.Amount
+		if len(fields[5]) == 0 {
+			if balance != 0 {
+				log.Printf("transactions line %d: no value inside transaction (balance=%d)", i, balance)
+				balance = 0
+			}
+			if len(fields[6]) == 0 {
+				tr = nil
+				continue
+			}
+			var sign int64 = 1
+			offset := 0
+			if fields[6][0] == '+' {
+				sign = 1
+				offset = 1
+			} else if fields[6][0] == '-' {
+				sign = -1
+				offset = 1
+			}
+			f, err := strconv.ParseFloat(fields[6][offset:], 64)
+			if err != nil {
+				log.Printf("transactions line %d: invalud balance (%s)", i, fields[6])
+				continue
+			}
+			var v accounting.Value
+			v.Currency = &c.currency
+			v.Amount = sign * int64(math.Round(100*f)) * 1000_000
+			c.ledger.Assertions[sp] = v
+		}
+		if len(fields[5]) > 0 {
+			var sign int64
+			if fields[5][0] == '+' {
+				sign = 1
+			} else if fields[5][0] == '-' {
+				sign = -1
+			} else {
+				log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
+				continue
+			}
+			f, err := strconv.ParseFloat(fields[5][1:], 64)
+			if err != nil {
+				log.Printf("transaction line %d: invalid value (%s)", i, fields[5])
+				continue
+			}
+			sp.Value.Currency = &c.currency
+			sp.Value.Amount = sign * int64(math.Round(100*f)) * 1000_000
+			balance += sp.Value.Amount
+		}
 		tr.Splits = append(tr.Splits, sp)
 		sp.Account.Splits = append(sp.Account.Splits, sp)
 		if balance == 0 {
@@ -203,7 +227,7 @@ func (c *conn) read() error {
 	})
 	for a := range c.ledger.Accounts {
 		sort.SliceStable(c.ledger.Accounts[a].Splits, func(i, j int) bool {
-			if c.ledger.Accounts[a].Splits[i].Time == c.ledger.Transactions[a].Splits[j].Time {
+			if c.ledger.Accounts[a].Splits[i].Time == c.ledger.Accounts[a].Splits[j].Time {
 				return i < j
 			}
 			return c.ledger.Accounts[a].Splits[i].Time.Before(*c.ledger.Accounts[a].Splits[j].Time)
