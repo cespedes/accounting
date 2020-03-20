@@ -291,63 +291,81 @@ func (l *ledgerConnection) readJournal() error {
 			}
 		}
 		if indented && (lastLine == lineTransaction || lastLine == lineSplit) {
-			// split
+			// this is a split
 			t := l.ledger.Transactions[len(l.ledger.Transactions)-1]
 			s := new(accounting.Split)
 			s.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
+			if comment != "" {
+				l.ledger.Comments[s] = []string{comment}
+			}
 
-			i := strings.Index(text, "  ")
-			if i > 0 {
-				var err error
-				var newAccount bool
-				s.Account, newAccount = l.getAccount(text[:i])
-				if newAccount == true {
-					log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
-				}
-				// TODO FIXME XXX implement "="
-				j := strings.Index(text[i:], "@")
-				if j > 0 {
-					s.Value, err = l.getValue(strings.TrimSpace(text[i : i+j]))
-					if err != nil {
-						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
-						continue
-					}
-					if len(text[i:])-j < 2 {
-						log.Printf("%s:%d: syntax error (no value after '@')", line.Filename, line.LineNum)
-						continue
-					}
-					if text[i+j+1] == '@' {
-						value, err := l.getValue(strings.TrimSpace(text[i+j+2:]))
-						if err != nil {
-							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
-							continue
-						}
-						l.ledger.SplitPrices[s] = value
-					} else {
-						value, err := l.getValue(strings.TrimSpace(text[i+j+1:]))
-						if err != nil {
-							log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
-							continue
-						}
-						k := big.NewInt(s.Value.Amount)
-						k.Mul(k, big.NewInt(value.Amount))
-						k.Quo(k, big.NewInt(accounting.U))
-						value.Amount = k.Int64()
-						l.ledger.SplitPrices[s] = value
-					}
-				} else {
-					s.Value, err = l.getValue(strings.TrimSpace(text[i:]))
-					if err != nil {
-						log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
-						continue
-					}
-				}
+			var err error
+			var accountEnd int
+			var hasValue, hasPriceAbs, hasPriceRel, hasAssertion bool
+			var valueStart, valueEnd int
+			var priceStart, priceEnd int
+			var assertionStart, assertionEnd int
+			if i := strings.Index(text, "  "); i > 0 {
+				accountEnd = i
+				hasValue = true
+				valueStart = i + 2
+				valueEnd = len(text)
 			} else {
-				var newAccount bool
-				s.Account, newAccount = l.getAccount(text)
-				if newAccount == true {
-					log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
+				accountEnd = len(text)
+			}
+			var newAccount bool
+			s.Account, newAccount = l.getAccount(text[:accountEnd])
+			if newAccount == true {
+				log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
+			}
+			if hasValue {
+				if i := strings.Index(text[valueStart:], "@@"); i > 0 {
+					valueEnd = valueStart + i
+					hasPriceAbs = true
+					priceStart = valueStart + i + 2
+					priceEnd = len(text)
+				} else if i := strings.Index(text[valueStart:], "@"); i > 0 {
+					valueEnd = valueStart + i
+					hasPriceRel = true
+					priceStart = valueStart + i + 1
+					priceEnd = len(text)
 				}
+				if i := strings.Index(text[valueStart:], "="); i > 0 {
+					hasAssertion = true
+					assertionStart = valueStart + i + 1
+					assertionEnd = len(text)
+					priceEnd = valueStart + i
+					if !hasPriceAbs && !hasPriceRel {
+						valueEnd = valueStart + i
+					}
+				}
+				s.Value, err = l.getValue(strings.TrimSpace(text[valueStart:valueEnd]))
+				if err != nil {
+					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+					continue
+				}
+			}
+			if hasPriceRel || hasPriceAbs {
+				value, err := l.getValue(strings.TrimSpace(text[priceStart:priceEnd]))
+				if err != nil {
+					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+					continue
+				}
+				if hasPriceRel {
+					k := big.NewInt(s.Value.Amount)
+					k.Mul(k, big.NewInt(value.Amount))
+					k.Quo(k, big.NewInt(accounting.U))
+					value.Amount = k.Int64()
+				}
+				l.ledger.SplitPrices[s] = value
+			}
+			if hasAssertion {
+				value, err := l.getValue(strings.TrimSpace(text[assertionStart:assertionEnd]))
+				if err != nil {
+					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
+					continue
+				}
+				l.ledger.Assertions[s] = value
 			}
 			t.Splits = append(t.Splits, s)
 			lastLine = lineSplit
@@ -422,6 +440,9 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 		}
 	}
 done:
+	if strings.ContainsAny(value.Currency.Name, "=@") {
+		return value, errors.New("syntax error: invalid character in currency")
+	}
 	newCurrency := true
 	if value.Currency.Name == "" {
 		if l.defaultCurrency == nil {

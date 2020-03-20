@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -77,8 +76,10 @@ func (c *conn) read() error {
 	for sc.Scan() {
 		var ac accounting.Account
 		line := sc.Text()
+		// TODO: handle comments
 		fields := strings.Split(line, ":")
 		if len(fields) != 6 { // badly-formatted line: skip
+			// TODO: show error
 			continue
 		}
 		var id int
@@ -150,9 +151,7 @@ func (c *conn) read() error {
 			log.Printf("transactions line %d: invalid account (%s)", i, fields[4])
 			continue
 		}
-		if thisTime == tr.Time {
-			sp.Time = &tr.Time
-		} else {
+		if thisTime != tr.Time {
 			sp.Time = new(time.Time)
 			*sp.Time = thisTime
 		}
@@ -176,7 +175,7 @@ func (c *conn) read() error {
 			}
 			f, err := strconv.ParseFloat(fields[6][offset:], 64)
 			if err != nil {
-				log.Printf("transactions line %d: invalud balance (%s)", i, fields[6])
+				log.Printf("transactions line %d: invalid balance (%s)", i, fields[6])
 				continue
 			}
 			var v accounting.Value
@@ -218,25 +217,6 @@ func (c *conn) read() error {
 	}
 	if balance != 0 {
 		log.Printf("transactions: balance is %d, not zero", balance)
-	}
-	sort.SliceStable(c.ledger.Transactions, func(i, j int) bool {
-		if c.ledger.Transactions[i].Time == c.ledger.Transactions[j].Time {
-			return i < j
-		}
-		return c.ledger.Transactions[i].Time.Before(c.ledger.Transactions[j].Time)
-	})
-	for a := range c.ledger.Accounts {
-		sort.SliceStable(c.ledger.Accounts[a].Splits, func(i, j int) bool {
-			if c.ledger.Accounts[a].Splits[i].Time == c.ledger.Accounts[a].Splits[j].Time {
-				return i < j
-			}
-			return c.ledger.Accounts[a].Splits[i].Time.Before(*c.ledger.Accounts[a].Splits[j].Time)
-		})
-		var b accounting.Balance
-		for s := range c.ledger.Accounts[a].Splits {
-			b.Add(c.ledger.Accounts[a].Splits[s].Value)
-			c.ledger.Accounts[a].Splits[s].Balance = b.Dup()
-		}
 	}
 	return nil
 }

@@ -29,21 +29,15 @@ func tableAccounts(l *accounting.Ledger) {
 	t.Run()
 }
 
-func tableTransactions(l *accounting.Ledger, acc accounting.ID) {
-	transactions := l.TransactionsInAccount(acc)
-	fmt.Printf("account %d: %d transactions\n", acc, len(transactions))
+func tableTransactions(l *accounting.Ledger, accID accounting.ID) {
+	account := l.Account(accID)
+	fmt.Printf("account %d: %d splits\n", accID, len(account.Splits))
 	t := tableview.NewTableView()
 	t.FillTable([]string{"date", "description", "value", "balance"}, [][]string{})
 	t.SetExpansion(1, 1)
-	for i, tr := range transactions {
-		var sp *accounting.Split
-		for _, sp = range tr.Splits {
-			if sp.Account.ID == acc {
-				break
-			}
-		}
-		t.SetCell(i, 0, tr.Time.Format("02-01-2006"))
-		t.SetCell(i, 1, tr.Description)
+	for i, sp := range account.Splits {
+		t.SetCell(i, 0, sp.Time.Format("02-01-2006"))
+		t.SetCell(i, 1, sp.Transaction.Description)
 		t.SetCell(i, 2, sp.Value.String())
 		t.SetAlign(2, tableview.AlignRight)
 		t.SetCell(i, 3, sp.Balance.String())

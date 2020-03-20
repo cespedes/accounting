@@ -46,7 +46,7 @@ func Open(dataSource string) (*Ledger, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	b.Ledger.Fill()
 	return b.Ledger, nil
 }
 
@@ -406,6 +406,9 @@ func (l *Ledger) Display(out io.Writer) {
 
 // Add adds a value to a balance.
 func (b *Balance) Add(v Value) {
+	if v.Amount == 0 {
+		return
+	}
 	for i := range *b {
 		if (*b)[i].Currency == v.Currency {
 			(*b)[i].Amount += v.Amount
@@ -422,4 +425,35 @@ func (b Balance) Dup() Balance {
 		res.Add(v)
 	}
 	return res
+}
+
+// Fill re-calculates all the automatic fields in all the accounting data.
+func (l *Ledger) Fill() {
+	for _, a := range l.Accounts {
+		a.Splits = nil
+	}
+	sort.SliceStable(l.Transactions, func(i, j int) bool {
+		return l.Transactions[i].Time.Before(l.Transactions[j].Time)
+	})
+
+	for _, t := range l.Transactions {
+		for _, s := range t.Splits {
+			s.Transaction = t
+			if s.Time == nil {
+				s.Time = &t.Time
+			}
+			s.Account.Splits = append(s.Account.Splits, s)
+		}
+	}
+
+	for _, a := range l.Accounts {
+		sort.SliceStable(a.Splits, func(i, j int) bool {
+			return a.Splits[i].Time.Before(*a.Splits[j].Time)
+		})
+		var b Balance
+		for _, s := range a.Splits {
+			b.Add(s.Value)
+			s.Balance = b.Dup()
+		}
+	}
 }
