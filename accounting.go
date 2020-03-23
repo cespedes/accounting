@@ -3,7 +3,6 @@ package accounting
 import (
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/url"
 	"sort"
@@ -316,9 +315,6 @@ func SortAccounts(accounts []*Account) []*Account {
 	})
 	return accounts
 }
-func (l *Ledger) BalanceTransaction(transaction *Transaction) error {
-	return l.balanceTransaction(transaction)
-}
 
 func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 	var unbalancedSplit *Split
@@ -400,10 +396,6 @@ func (l *Ledger) GetCurrency(s string) *Currency {
 	return &currency
 }
 
-func (l *Ledger) Display(out io.Writer) {
-	l.connection.Display(out)
-}
-
 // Add adds a value to a balance.
 func (b *Balance) Add(v Value) {
 	if v.Amount == 0 {
@@ -428,7 +420,7 @@ func (b Balance) Dup() Balance {
 }
 
 // Fill re-calculates all the automatic fields in all the accounting data.
-func (l *Ledger) Fill() {
+func (l *Ledger) Fill() error {
 	for _, a := range l.Accounts {
 		a.Splits = nil
 	}
@@ -456,4 +448,10 @@ func (l *Ledger) Fill() {
 			s.Balance = b.Dup()
 		}
 	}
+	for _, t := range l.Transactions {
+		if err := l.balanceTransaction(t); err != nil {
+			return err
+		}
+	}
+	return nil
 }

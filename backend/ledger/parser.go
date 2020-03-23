@@ -126,12 +126,6 @@ func (s *Scanner) Line() ScannerLine {
 	return line
 }
 
-func addComment(comments *[]string, new string) {
-	if new != "" {
-		*comments = append(*comments, new)
-	}
-}
-
 // Read fills a ledger with the data from a journal file.
 func (l *ledgerConnection) readJournal() error {
 	l.ledger.Accounts = nil
@@ -199,12 +193,6 @@ func (l *ledgerConnection) readJournal() error {
 			comment = strings.TrimSpace(text[i+1:])
 			text = strings.TrimSpace(text[0:i])
 		}
-		if !indented && lastLine == lineSplit {
-			err := l.ledger.BalanceTransaction(l.ledger.Transactions[len(l.ledger.Transactions)-1])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
 		word, rest := firstWord(text)
 		if !indented && word == "include" {
 			lastLine = lineInclude
@@ -265,7 +253,7 @@ func (l *ledgerConnection) readJournal() error {
 		}
 		if !indented && word == "account" {
 			lastLine = lineAccount
-			_, new := l.getAccount(rest)
+			_, new := l.getAccount(line.Filename, line.LineNum, rest)
 			if new == false {
 				log.Fatalf("%s:%d: account already defined", line.Filename, line.LineNum)
 			}
@@ -314,7 +302,7 @@ func (l *ledgerConnection) readJournal() error {
 				accountEnd = len(text)
 			}
 			var newAccount bool
-			s.Account, newAccount = l.getAccount(text[:accountEnd])
+			s.Account, newAccount = l.getAccount(line.Filename, line.LineNum, text[:accountEnd])
 			if newAccount == true {
 				log.Printf("%s:%d undefined account %s", line.Filename, line.LineNum, s.Account.FullName())
 			}
@@ -373,29 +361,23 @@ func (l *ledgerConnection) readJournal() error {
 		}
 		log.Printf("%s:%d: UNIMPLEMENTED: \"%s\" (%s)\n", line.Filename, line.LineNum, text, comment)
 	}
-	if lastLine == lineSplit {
-		err := l.ledger.BalanceTransaction(l.ledger.Transactions[len(l.ledger.Transactions)-1])
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 	return nil
 }
 
-func (l *ledgerConnection) getAccount(s string) (acc *accounting.Account, new bool) {
+func (l *ledgerConnection) getAccount(filename string, lineNum int, str string) (acc *accounting.Account, new bool) {
 	for i := range l.ledger.Accounts {
-		if s == l.ledger.Accounts[i].FullName() {
+		if str == l.ledger.Accounts[i].FullName() {
 			return l.ledger.Accounts[i], false
 		}
 	}
 	var parent *accounting.Account
-	if i := strings.LastIndexByte(s, ':'); i > -1 {
-		parent, _ = l.getAccount(s[:i])
-		s = s[i+1:]
+	if i := strings.LastIndexByte(str, ':'); i > -1 {
+		parent, _ = l.getAccount(filename, lineNum, str[:i])
+		str = str[i+1:]
 	}
 	var account accounting.Account
-	// account.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
-	account.Name = s
+	account.ID = &ID{filename: filename, lineNum: lineNum}
+	account.Name = str
 	account.Parent = parent
 	l.ledger.Accounts = append(l.ledger.Accounts, &account)
 	return &account, true

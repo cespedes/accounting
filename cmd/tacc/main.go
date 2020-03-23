@@ -24,14 +24,13 @@ func tableAccounts(l *accounting.Ledger) {
 		t.SetCell(i, 1, l.GetBalance(ac, time.Time{}).String())
 	}
 	t.SetSelectedFunc(func(row int) {
-		tableTransactions(l, l.Accounts[row-1].ID)
+		tableTransactions(l, l.Accounts[row-1])
 	})
 	t.Run()
 }
 
-func tableTransactions(l *accounting.Ledger, accID accounting.ID) {
-	account := l.Account(accID)
-	fmt.Printf("account %d: %d splits\n", accID, len(account.Splits))
+func tableTransactions(l *accounting.Ledger, account *accounting.Account) {
+	fmt.Printf("account %s: %d splits\n", account.FullName(), len(account.Splits))
 	t := tableview.NewTableView()
 	t.FillTable([]string{"date", "description", "value", "balance"}, [][]string{})
 	t.SetExpansion(1, 1)

@@ -43,8 +43,8 @@ func (conn *ledgerConnection) Refresh() {
 	// TODO FIXME XXX: notifier
 }
 
-// Display shows the "Ledger" representation of an accounting ledger.
-func Display(out io.Writer, ledger *accounting.Ledger) {
+// Export shows the "Ledger" representation of an accounting ledger.
+func Export(out io.Writer, ledger *accounting.Ledger) {
 	fmt.Fprintln(out, "\n; Accounts:")
 	for _, a := range ledger.Accounts {
 		fmt.Fprintf(out, "account %s", a.FullName())
@@ -140,8 +140,4 @@ func Display(out io.Writer, ledger *accounting.Ledger) {
 			}
 		}
 	}
-}
-
-func (conn *ledgerConnection) Display(out io.Writer) {
-	Display(out, conn.ledger)
 }

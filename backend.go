@@ -1,7 +1,6 @@
 package accounting
 
 import (
-	"io"
 	"time"
 )
 
@@ -19,9 +18,6 @@ type Connection interface {
 
 	// Refresh loads again (if needed) all the accounting data.
 	Refresh()
-
-	// Show the ledger data.
-	Display(out io.Writer)
 }
 
 // Backend contains the Ledger and some methods to be called only by the backends.

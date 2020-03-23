@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net/url"
@@ -223,8 +222,4 @@ func (c *conn) read() error {
 
 func init() {
 	accounting.Register("txtdb", driver{})
-}
-
-func (c *conn) Display(out io.Writer) {
-	// TODO FIXME XXX: notifier
 }

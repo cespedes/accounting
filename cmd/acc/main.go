@@ -20,7 +20,7 @@ func main() {
 		panic(err)
 	}
 
-	ledger.Display(os.Stdout, L)
+	ledger.Export(os.Stdout, L)
 	//	for _, a := range L.Accounts {
 	//		fmt.Printf("%#v\n", a)
 	//	}

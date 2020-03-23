@@ -15,7 +15,6 @@ type Ledger struct {
 	Comments     map[interface{}][]string // Comments in Accounts, Transactions, Currencies or Prices.
 	Assertions   map[*Split]Value         // Value that should be in an account after one split.
 	SplitPrices  map[*Split]Value         // Price for the value in a split, in another currency.
-	// SplitTotalPrice map[*Split]Value         // Price for the total value in a given split.
 	// Tags            map[interface{}][]Tag
 	// TagsByName      map[string][]struct {Value string; Place interface{}}
 }

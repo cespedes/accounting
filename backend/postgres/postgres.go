@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/cespedes/accounting"
@@ -135,9 +134,4 @@ func getTransactions(c *conn) {
 // Flush is a no-op in SQL: all the writes to the database are unbuffered
 func (c *conn) Flush() error {
 	return nil
-}
-
-func (c *conn) Display(out io.Writer) {
-	// TODO FIXME XXX
-	fmt.Fprintln(out, "/* Unimplemented */")
 }
