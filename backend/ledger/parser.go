@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -126,6 +127,56 @@ func (s *Scanner) Line() ScannerLine {
 	return line
 }
 
+type tag struct {
+	Name  string
+	Value string
+}
+
+func getTag(s string) *tag {
+	re := regexp.MustCompile(`[a-z]+:.*`)
+	t := re.FindString(s)
+	if t == "" {
+		return nil
+	}
+	tag := new(tag)
+	i := strings.Index(t, ":")
+	tag.Name = t[0:i]
+	tag.Value = t[i+1:]
+	return tag
+}
+
+func (l *ledgerConnection) addComment(where interface{}, comment string) {
+	tag := getTag(comment)
+	if tag == nil {
+		l.ledger.Comments[where] = append(l.ledger.Comments[where], comment)
+		return
+	}
+	switch x := where.(type) {
+	case *accounting.Account:
+		if tag.Name == "code" {
+			x.Code = tag.Value
+			return
+		}
+	case *accounting.Split:
+		if tag.Name == "date" {
+			t, err := getDate(tag.Value)
+			if err != nil {
+				log.Printf("%s: Invalid date: %s", x.ID, tag.Value)
+			} else {
+				x.Time = &t
+			}
+			return
+		}
+	case *accounting.Currency:
+		if tag.Name == "isin" {
+			x.ISIN = tag.Value
+		}
+		return
+	}
+	// Unknown tag:
+	l.ledger.Comments[where] = append(l.ledger.Comments[where], comment)
+}
+
 // Read fills a ledger with the data from a journal file.
 func (l *ledgerConnection) readJournal() error {
 	l.ledger.Accounts = nil
@@ -169,20 +220,20 @@ func (l *ledgerConnection) readJournal() error {
 				switch lastLine {
 				case lineAccount:
 					var account *accounting.Account = l.ledger.Accounts[len(l.ledger.Accounts)-1]
-					l.ledger.Comments[account] = append(l.ledger.Comments[account], comment)
+					l.addComment(account, comment)
 				case lineCommodity:
 					var currency *accounting.Currency = l.ledger.Currencies[len(l.ledger.Currencies)-1]
-					l.ledger.Comments[currency] = append(l.ledger.Comments[currency], comment)
+					l.addComment(currency, comment)
 				case linePrice:
 					var price *accounting.Price = l.ledger.Prices[len(l.ledger.Prices)-1]
-					l.ledger.Comments[price] = append(l.ledger.Comments[price], comment)
+					l.addComment(price, comment)
 				case lineTransaction:
 					var transaction *accounting.Transaction = l.ledger.Transactions[len(l.ledger.Transactions)-1]
-					l.ledger.Comments[transaction] = append(l.ledger.Comments[transaction], comment)
+					l.addComment(transaction, comment)
 				case lineSplit:
 					var transaction *accounting.Transaction = l.ledger.Transactions[len(l.ledger.Transactions)-1]
 					var split *accounting.Split = transaction.Splits[len(transaction.Splits)-1]
-					l.ledger.Comments[split] = append(l.ledger.Comments[split], comment)
+					l.addComment(split, comment)
 				default:
 					fmt.Printf("%s:%d: Wrong indented comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 				}
@@ -222,7 +273,7 @@ func (l *ledgerConnection) readJournal() error {
 			price.Currency = l.ledger.GetCurrency(currency)
 			price.Value, err = l.getValue(rest)
 			if comment != "" {
-				l.ledger.Comments[&price] = append(l.ledger.Comments[&price], comment)
+				l.addComment(&price, comment)
 			}
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
@@ -271,7 +322,7 @@ func (l *ledgerConnection) readJournal() error {
 				transaction.Time = date
 				transaction.Description = rest
 				if comment != "" {
-					l.ledger.Comments[&transaction] = append(l.ledger.Comments[&transaction], comment)
+					l.addComment(&transaction, comment)
 				}
 				l.ledger.Transactions = append(l.ledger.Transactions, &transaction)
 				lastLine = lineTransaction
@@ -284,7 +335,7 @@ func (l *ledgerConnection) readJournal() error {
 			s := new(accounting.Split)
 			s.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 			if comment != "" {
-				l.ledger.Comments[s] = []string{comment}
+				l.addComment(s, comment)
 			}
 
 			var err error
@@ -389,7 +440,7 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 	var sAmount string
 
 	if s == "" {
-		return value, errors.New("empty value")
+		return value, nil // empty value == zero value
 	}
 	if s[0] == '-' || s[0] == '+' || (s[0] >= '0' && s[0] <= '9') {
 		// first amount, then currency

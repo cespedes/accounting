@@ -36,6 +36,7 @@ type Currency struct {
 	Thousand     string // What to use (if any) every 3 digits
 	Decimal      string // decimal separator ("." if empty)
 	Precision    int    // Number of decimal places to show
+	ISIN         string // International Securities Identification Number
 }
 
 // Value specifies an amount and its currency

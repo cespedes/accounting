@@ -205,11 +205,6 @@ func (c *conn) read() error {
 		sp.Account.Splits = append(sp.Account.Splits, sp)
 		if balance == 0 {
 			c.ledger.Transactions = append(c.ledger.Transactions, tr)
-			/*
-				if err := c.backend.NewTransaction(tr); err != nil {
-					log.Printf("transactions line %d: %v", i, err)
-				}
-			*/
 			tr = nil
 			nextID++
 		}

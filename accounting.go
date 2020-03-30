@@ -436,6 +436,9 @@ func (l *Ledger) Fill() error {
 			}
 			s.Account.Splits = append(s.Account.Splits, s)
 		}
+		if err := l.balanceTransaction(t); err != nil {
+			return err
+		}
 	}
 
 	for _, a := range l.Accounts {
@@ -446,11 +449,6 @@ func (l *Ledger) Fill() error {
 		for _, s := range a.Splits {
 			b.Add(s.Value)
 			s.Balance = b.Dup()
-		}
-	}
-	for _, t := range l.Transactions {
-		if err := l.balanceTransaction(t); err != nil {
-			return err
 		}
 	}
 	return nil
