@@ -191,7 +191,6 @@ func (l *ledgerConnection) readJournal() error {
 	s.NewFile(l.file)
 
 	lastLine := lineNone
-	lastTime := time.Time{}
 	for {
 		line := s.Line()
 		if line.Err != nil {
@@ -264,10 +263,9 @@ func (l *ledgerConnection) readJournal() error {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
-			if lastTime.After(price.Time) {
+			if len(l.ledger.Prices) > 0 && l.ledger.Prices[len(l.ledger.Prices)-1].Time.After(price.Time) {
 				log.Fatalf("%s:%d: price is not chronologically sorted", line.Filename, line.LineNum)
 			}
-			lastTime = price.Time
 			currency, rest := firstWord(rest)
 			price.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 			price.Currency = l.ledger.GetCurrency(currency)
@@ -313,10 +311,9 @@ func (l *ledgerConnection) readJournal() error {
 		if !indented {
 			date, err := getDate(word)
 			if err == nil {
-				if lastTime.After(date) {
+				if len(l.ledger.Transactions) > 0 && l.ledger.Transactions[len(l.ledger.Transactions)-1].Time.After(date) {
 					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
 				}
-				lastTime = date
 				var transaction accounting.Transaction
 				transaction.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
 				transaction.Time = date

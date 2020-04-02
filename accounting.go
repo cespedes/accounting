@@ -440,6 +440,9 @@ func (l *Ledger) Fill() error {
 			return err
 		}
 	}
+	sort.SliceStable(l.Prices, func(i, j int) bool {
+		return l.Prices[i].Time.Before(l.Prices[j].Time)
+	})
 
 	for _, a := range l.Accounts {
 		sort.SliceStable(a.Splits, func(i, j int) bool {
