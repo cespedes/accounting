@@ -45,7 +45,9 @@ func Open(dataSource string) (*Ledger, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.Ledger.Fill()
+	if err = b.Ledger.Fill(); err != nil {
+		return nil, err
+	}
 	return b.Ledger, nil
 }
 
@@ -368,6 +370,7 @@ func (l *Ledger) balanceTransaction(transaction *Transaction) error {
 		l.Prices = append(l.Prices, price)
 		l.Comments[price] = append(l.Comments[price], "automatic")
 		price = new(Price)
+		price.Time = transaction.Time
 		price.Currency = balance[1].Currency
 		i = big.NewInt(-U)
 		i.Mul(i, big.NewInt(balance[0].Amount))
@@ -419,11 +422,33 @@ func (b Balance) Dup() Balance {
 	return res
 }
 
+func insertAccount(where *[]*Account, account *Account) {
+	*where = append(*where, account)
+	for _, a := range account.Children {
+		insertAccount(where, a)
+	}
+}
+
 // Fill re-calculates all the automatic fields in all the accounting data.
 func (l *Ledger) Fill() error {
 	for _, a := range l.Accounts {
 		a.Splits = nil
+		a.Children = nil
 	}
+	for _, a := range l.Accounts {
+		if a.Parent != nil {
+			a.Level = a.Parent.Level + 1
+			a.Parent.Children = append(a.Parent.Children, a)
+		}
+	}
+	var newAccounts []*Account
+	for _, a := range l.Accounts {
+		if a.Parent == nil {
+			insertAccount(&newAccounts, a)
+		}
+	}
+	l.Accounts = newAccounts
+
 	sort.SliceStable(l.Transactions, func(i, j int) bool {
 		return l.Transactions[i].Time.Before(l.Transactions[j].Time)
 	})

@@ -45,7 +45,7 @@ func (conn *ledgerConnection) Refresh() {
 
 // Export shows the "Ledger" representation of an accounting ledger.
 func Export(out io.Writer, ledger *accounting.Ledger) {
-	fmt.Fprintln(out, "\n; Accounts:")
+	// fmt.Fprintln(out, "\n; Accounts:")
 	for _, a := range ledger.Accounts {
 		fmt.Fprintf(out, "account %s", a.FullName())
 		if len(ledger.Comments[a]) > 0 {
@@ -58,7 +58,8 @@ func Export(out io.Writer, ledger *accounting.Ledger) {
 			}
 		}
 	}
-	fmt.Fprintln(out, "\n; Currencies:")
+	fmt.Fprintln(out)
+	// fmt.Fprintln(out, "\n; Currencies:")
 	for _, cu := range ledger.Currencies {
 		var v accounting.Value
 		v.Amount = 1_000_000 * accounting.U
@@ -74,7 +75,8 @@ func Export(out io.Writer, ledger *accounting.Ledger) {
 			}
 		}
 	}
-	fmt.Fprintln(out, "\n; Transactions and prices:")
+	fmt.Fprintln(out)
+	// fmt.Fprintln(out, "\n; Transactions and prices:")
 	var i, j int
 	for i < len(ledger.Transactions) || j < len(ledger.Prices) {
 		var t *accounting.Transaction

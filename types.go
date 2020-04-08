@@ -50,11 +50,13 @@ type Balance []Value
 
 // Account specifies one origin or destination of funds.
 type Account struct {
-	ID     ID       // used to identify this account.
-	Parent *Account // Optional
-	Name   string   // Common (short) name (ie, "Cash")
-	Code   string   // Optional. For example, account number
-	Splits []*Split // List of movements in this account
+	ID       ID         // used to identify this account.
+	Parent   *Account   // Optional
+	Children []*Account // Automatically filled.
+	Level    int        // Number of ancestors does this Account have. Automatically filled.
+	Name     string     // Common (short) name (ie, "Cash")
+	Code     string     // Optional. For example, account number
+	Splits   []*Split   // List of movements in this account
 }
 
 // Transaction stores an entry in the journal, consisting in a timestamp,

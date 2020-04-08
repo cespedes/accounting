@@ -17,7 +17,8 @@ func main() {
 	}
 	L, err := accounting.Open(os.Args[1])
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
 
 	ledger.Export(os.Stdout, L)

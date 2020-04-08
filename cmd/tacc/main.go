@@ -37,7 +37,9 @@ func tableTransactions(l *accounting.Ledger, account *accounting.Account) {
 	for i, sp := range account.Splits {
 		t.SetCell(i, 0, sp.Time.Format("02-01-2006"))
 		t.SetCell(i, 1, sp.Transaction.Description)
-		t.SetCell(i, 2, sp.Value.String())
+		if v := sp.Value.String(); v != "0" {
+			t.SetCell(i, 2, sp.Value.String())
+		}
 		t.SetAlign(2, tableview.AlignRight)
 		t.SetCell(i, 3, sp.Balance.String())
 		t.SetAlign(3, tableview.AlignRight)
@@ -52,7 +54,8 @@ func main() {
 	}
 	ledger, err := accounting.Open(os.Args[1])
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
 
 	tableAccounts(ledger)
