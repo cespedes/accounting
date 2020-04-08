@@ -477,6 +477,20 @@ func (l *Ledger) Fill() error {
 		for _, s := range a.Splits {
 			b.Add(s.Value)
 			s.Balance = b.Dup()
+			if a := l.Assertions[s]; a != (Value{}) {
+				for _, v := range b {
+					if v.Currency == a.Currency {
+						if v.Amount != a.Amount {
+							return fmt.Errorf("%s: wrong assertion: %s != %s", s.ID, v, a)
+						}
+						a = Value{}
+						continue
+					}
+				}
+				if a != (Value{}) {
+					return fmt.Errorf("%s: wrong assertion: %s", s.ID, a)
+				}
+			}
 		}
 	}
 	return nil

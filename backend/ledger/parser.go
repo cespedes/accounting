@@ -366,7 +366,7 @@ func (l *ledgerConnection) readJournal() error {
 					priceStart = valueStart + i + 1
 					priceEnd = len(text)
 				}
-				if i := strings.Index(text[valueStart:], "="); i > 0 {
+				if i := strings.Index(text[valueStart:], "="); i >= 0 {
 					hasAssertion = true
 					assertionStart = valueStart + i + 1
 					assertionEnd = len(text)
@@ -437,7 +437,7 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 	var sAmount string
 
 	if s == "" {
-		return value, nil // empty value == zero value
+		return accounting.Value{}, nil // empty value == zero value
 	}
 	if s[0] == '-' || s[0] == '+' || (s[0] >= '0' && s[0] <= '9') {
 		// first amount, then currency
