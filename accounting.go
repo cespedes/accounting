@@ -318,75 +318,7 @@ func SortAccounts(accounts []*Account) []*Account {
 	return accounts
 }
 
-func (l *Ledger) balanceTransaction(transaction *Transaction) error {
-	var unbalancedSplit *Split
-	var balance Balance
-	for i, s := range transaction.Splits {
-		if s.Value.Currency == nil {
-			if unbalancedSplit != nil {
-				return fmt.Errorf("%s: more than one posting without amount", transaction.ID)
-			}
-			unbalancedSplit = transaction.Splits[i]
-			continue
-		}
-		if v, ok := l.SplitPrices[s]; ok == true {
-			balance.Add(v)
-		} else {
-			balance.Add(s.Value)
-		}
-	}
-	for i := 0; i < len(balance); i++ {
-		for i < len(balance) && balance[i].Amount == 0 {
-			balance[i] = balance[len(balance)-1]
-			balance = balance[:len(balance)-1]
-		}
-	}
-	if len(balance) == 0 {
-		// everything is balanced
-		return nil
-	}
-	if unbalancedSplit != nil && len(balance) == 1 {
-		unbalancedSplit.Value = balance[0]
-		unbalancedSplit.Value.Amount = -unbalancedSplit.Value.Amount
-		return nil
-	}
-	if unbalancedSplit != nil {
-		return fmt.Errorf("%s: could not balance account %q: two or more currencies in transaction", transaction.ID, unbalancedSplit.Account.FullName())
-	}
-	if len(balance) == 1 {
-		return fmt.Errorf("%s: could not balance transaction: total amount is %s", transaction.ID, balance[0])
-	}
-	if len(balance) == 2 {
-		// we add 2 automatic prices, converting one currency to another and vice-versa
-		price := new(Price)
-		var i *big.Int
-		price.Time = transaction.Time
-		price.Currency = balance[0].Currency
-		i = big.NewInt(-U)
-		i.Mul(i, big.NewInt(balance[1].Amount))
-		i.Quo(i, big.NewInt(balance[0].Amount))
-		price.Value.Amount = i.Int64()
-		price.Value.Currency = balance[1].Currency
-		l.Prices = append(l.Prices, price)
-		l.Comments[price] = append(l.Comments[price], "automatic")
-		price = new(Price)
-		price.Time = transaction.Time
-		price.Currency = balance[1].Currency
-		i = big.NewInt(-U)
-		i.Mul(i, big.NewInt(balance[0].Amount))
-		i.Quo(i, big.NewInt(balance[1].Amount))
-		price.Value.Amount = i.Int64()
-		price.Value.Currency = balance[0].Currency
-		l.Prices = append(l.Prices, price)
-		l.Comments[price] = append(l.Comments[price], "automatic")
-		return nil
-	}
-	if len(balance) > 2 {
-		return fmt.Errorf("%s: not able to balance transactions with 3 or more currencies", transaction.ID)
-	}
-	panic("balanceTransaction(): unreachable code")
-}
-
+// GetCurrency returns a Currency, given its name
 func (l *Ledger) GetCurrency(s string) *Currency {
 	for i := range l.Currencies {
 		if s == l.Currencies[i].Name {
@@ -407,6 +339,10 @@ func (b *Balance) Add(v Value) {
 	for i := range *b {
 		if (*b)[i].Currency == v.Currency {
 			(*b)[i].Amount += v.Amount
+			if (*b)[i].Amount == 0 {
+				(*b)[i] = (*b)[len(*b)-1]
+				*b = (*b)[:len(*b)-1]
+			}
 			return
 		}
 	}
@@ -461,37 +397,143 @@ func (l *Ledger) Fill() error {
 			}
 			s.Account.Splits = append(s.Account.Splits, s)
 		}
-		if err := l.balanceTransaction(t); err != nil {
-			return err
-		}
 	}
-	sort.SliceStable(l.Prices, func(i, j int) bool {
-		return l.Prices[i].Time.Before(l.Prices[j].Time)
-	})
-
 	for _, a := range l.Accounts {
 		sort.SliceStable(a.Splits, func(i, j int) bool {
 			return a.Splits[i].Time.Before(*a.Splits[j].Time)
 		})
-		var b Balance
-		for _, s := range a.Splits {
-			b.Add(s.Value)
-			s.Balance = b.Dup()
-			if a := l.Assertions[s]; a != (Value{}) {
-				for _, v := range b {
-					if v.Currency == a.Currency {
-						if v.Amount != a.Amount {
-							return fmt.Errorf("%s: wrong assertion: %s != %s", s.ID, v, a)
-						}
-						a = Value{}
-						continue
-					}
+	}
+
+	finished := false
+	deadlock := false
+	iTransactions := 0
+	iAccounts := make(map[int]int)
+	for !finished && !deadlock {
+		finished = true
+		deadlock = true
+		for ; iTransactions < len(l.Transactions); iTransactions++ {
+			finished = false
+			// Check for the correctness of a transaction, and fill all the calculated fields
+			transaction := l.Transactions[iTransactions]
+			var unbalancedSplit *Split
+			var balance Balance
+			for i, s := range transaction.Splits {
+				if s.Value.Currency == nil && l.Assertions[s] != (Value{}) {
+					goto endTransaction
 				}
-				if a != (Value{}) {
-					return fmt.Errorf("%s: wrong assertion: %s", s.ID, a)
+				if s.Value.Currency == nil {
+					if unbalancedSplit != nil {
+						return fmt.Errorf("%s: more than one posting without amount", transaction.ID)
+					}
+					unbalancedSplit = transaction.Splits[i]
+					continue
+				}
+				if v, ok := l.SplitPrices[s]; ok == true {
+					balance.Add(v)
+				} else {
+					balance.Add(s.Value)
+				}
+			}
+			if len(balance) == 0 {
+				// everything is balanced
+				deadlock = false
+				continue
+			}
+			if unbalancedSplit != nil && len(balance) == 1 {
+				unbalancedSplit.Value = balance[0]
+				unbalancedSplit.Value.Amount = -unbalancedSplit.Value.Amount
+				deadlock = false
+				continue
+			}
+			if unbalancedSplit != nil {
+				return fmt.Errorf("%s: could not balance account %q: two or more currencies in transaction", transaction.ID, unbalancedSplit.Account.FullName())
+			}
+			if len(balance) == 1 {
+				return fmt.Errorf("%s: could not balance transaction: total amount is %s", transaction.ID, balance[0])
+			}
+			if len(balance) == 2 {
+				// we add 2 automatic prices, converting one currency to another and vice-versa
+				price := new(Price)
+				var i *big.Int
+				price.Time = transaction.Time
+				price.Currency = balance[0].Currency
+				i = big.NewInt(-U)
+				i.Mul(i, big.NewInt(balance[1].Amount))
+				i.Quo(i, big.NewInt(balance[0].Amount))
+				price.Value.Amount = i.Int64()
+				price.Value.Currency = balance[1].Currency
+				l.Prices = append(l.Prices, price)
+				l.Comments[price] = append(l.Comments[price], "automatic")
+				price = new(Price)
+				price.Time = transaction.Time
+				price.Currency = balance[1].Currency
+				i = big.NewInt(-U)
+				i.Mul(i, big.NewInt(balance[0].Amount))
+				i.Quo(i, big.NewInt(balance[1].Amount))
+				price.Value.Amount = i.Int64()
+				price.Value.Currency = balance[0].Currency
+				l.Prices = append(l.Prices, price)
+				l.Comments[price] = append(l.Comments[price], "automatic")
+				deadlock = false
+				continue
+			}
+			if len(balance) > 2 {
+				return fmt.Errorf("%s: not able to balance transactions with 3 or more currencies", transaction.ID)
+			}
+			panic("balancing transaction: unreachable code")
+		}
+	endTransaction:
+		for i := 0; i < len(l.Accounts); i++ {
+			var b Balance
+			if iAccounts[i] > 0 {
+				b = l.Accounts[i].Splits[iAccounts[i]-1].Balance
+			}
+			for ; iAccounts[i] < len(l.Accounts[i].Splits); iAccounts[i]++ {
+				finished = false
+				s := l.Accounts[i].Splits[iAccounts[i]]
+				if s.Value == (Value{}) && l.Assertions[s] == (Value{}) {
+					break
+				}
+				deadlock = false
+				b.Add(s.Value)
+				s.Balance = b.Dup()
+				if a := l.Assertions[s]; a != (Value{}) {
+					if a.Amount == 0 && len(b) == 0 {
+						a = Value{}
+					} else if s.Value == (Value{}) && len(b) == 0 {
+						s.Value = a
+						s.Value.Amount = a.Amount
+						s.Balance.Add(s.Value)
+						a = Value{}
+					}
+					for _, v := range b {
+						if v.Currency == a.Currency {
+							if s.Value == (Value{}) {
+								s.Value = a
+								s.Value.Amount = a.Amount - v.Amount
+								s.Balance.Add(s.Value)
+							} else if v.Amount != a.Amount {
+								return fmt.Errorf("%s: wrong assertion: %s != %s", s.ID, v, a)
+							}
+							a = Value{}
+							break
+						}
+					}
+					if a != (Value{}) {
+						return fmt.Errorf("%s: wrong assertion: %s", s.ID, a)
+					}
 				}
 			}
 		}
 	}
+	if !finished && deadlock {
+		return fmt.Errorf("%s: deadlock (cannot balance transaction)", l.Transactions[iTransactions].ID)
+	}
+
+	// This must be executed after all the balances
+	sort.SliceStable(l.Prices, func(i, j int) bool {
+		return l.Prices[i].Time.Before(l.Prices[j].Time)
+	})
+
 	return nil
 }
