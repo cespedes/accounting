@@ -59,6 +59,10 @@ type Account struct {
 	Splits   []*Split   // List of movements in this account
 }
 
+var transferAccount Account = Account{
+	Name: "Transfer account",
+}
+
 // Transaction stores an entry in the journal, consisting in a timestamp,
 // a description and two or more money movements from different accounts.
 type Transaction struct {
