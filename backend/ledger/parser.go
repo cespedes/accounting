@@ -159,7 +159,7 @@ func (l *ledgerConnection) addComment(where interface{}, comment string) {
 		}
 	case *accounting.Split:
 		if tag.Name == "date" {
-			t, err := getDate(tag.Value)
+			t, err := GetDate(tag.Value)
 			if err != nil {
 				log.Printf("%s: Invalid date: %s", x.ID, tag.Value)
 			} else {
@@ -258,7 +258,7 @@ func (l *ledgerConnection) readJournal() error {
 			var err error
 			// set price
 			date, rest := firstWord(rest)
-			price.Time, err = getDate(date)
+			price.Time, err = GetDate(date)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
@@ -309,7 +309,7 @@ func (l *ledgerConnection) readJournal() error {
 			continue
 		}
 		if !indented {
-			date, err := getDate(word)
+			date, err := GetDate(word)
 			if err == nil {
 				if len(l.ledger.Transactions) > 0 && l.ledger.Transactions[len(l.ledger.Transactions)-1].Time.After(date) {
 					log.Fatalf("%s:%d: transaction is not chronologically sorted", line.Filename, line.LineNum)
@@ -603,7 +603,8 @@ func firstWord(s string) (string, string) {
 	return s, ""
 }
 
-func getDate(s string) (time.Time, error) {
+// GetDate returns a time from a string.
+func GetDate(s string) (time.Time, error) {
 	s = strings.ReplaceAll(s, "/", "-")
 	s = strings.ReplaceAll(s, "_", "-")
 	s = strings.ReplaceAll(s, ":", "-")

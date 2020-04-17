@@ -448,6 +448,9 @@ func (l *Ledger) Fill() error {
 			}
 			if len(balance) == 0 {
 				// everything is balanced
+				if unbalancedSplit != nil {
+					unbalancedSplit.Value.Currency = new(Currency)
+				}
 				deadlock = false
 				continue
 			}
@@ -515,6 +518,7 @@ func (l *Ledger) Fill() error {
 					} else if s.Value == (Value{}) && len(b) == 0 {
 						s.Value = a
 						s.Value.Amount = a.Amount
+						b.Add(s.Value)
 						s.Balance.Add(s.Value)
 						a = Value{}
 					}
@@ -523,6 +527,7 @@ func (l *Ledger) Fill() error {
 							if s.Value == (Value{}) {
 								s.Value = a
 								s.Value.Amount = a.Amount - v.Amount
+								b.Add(s.Value)
 								s.Balance.Add(s.Value)
 							} else if v.Amount != a.Amount {
 								return fmt.Errorf("%s: wrong assertion: %s != %s", s.ID, v, a)

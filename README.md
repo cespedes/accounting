@@ -16,8 +16,7 @@ accounting uses a ledger file format mostly compatible with the original "ledger
 See https://www.ledger-cli.org/3.0/doc/ledger3.html and https://hledger.org/journal.html
 
 # To-Do list
-  + ledger: sort entries?
-  + ledger: calc and add balances to transactions
-  + ledger: implement "date:" tag ???
   + ledger: notifier
-  + ledger: "=" inside split
+  + ledger: implement "-b" (begin date) and "-e" (end date) (print, balance, stats)
+  + ledger: implement "--value" (begin date) and "-e" (end date) (print, balance, stats)
+  + tacc: improve.  Get ideas from hledger-ui

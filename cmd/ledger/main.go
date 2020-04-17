@@ -72,7 +72,7 @@ func runBalance(args []string) error {
 	} else {
 		for _, a := range Ledger.Accounts {
 			for _, b := range args {
-				if strings.Contains(strings.ToLower(a.Name), strings.ToLower(b)) {
+				if strings.Contains(strings.ToLower(a.FullName()), strings.ToLower(b)) {
 					insertAccount(&accounts, a.FullName(), 0, a)
 					break
 				}
@@ -106,7 +106,10 @@ func runBalance(args []string) error {
 			fmt.Printf("%*.0s%s\n", maxLength+1+2*a.Level, " ", a.Name)
 		}
 	}
-	fmt.Printf("%*.*s\n", maxLength, maxLength, "-----------------------------------------------------------------------")
+	for i := 0; i < maxLength; i++ {
+		fmt.Print("-")
+	}
+	fmt.Println()
 	for _, v := range b {
 		fmt.Printf("%*.*s\n", maxLength, maxLength, v.String())
 	}
@@ -154,7 +157,10 @@ func Usage() {
 func main() {
 	var err error
 	var filename string
+	var txtEndDate string
+	var endDate time.Time
 	flag.StringVar(&filename, "f", "", "journal file")
+	flag.StringVar(&txtEndDate, "e", "", "end date")
 	flag.Parse()
 	if filename == "" {
 		filename = os.Getenv("LEDGER_FILE")
@@ -162,6 +168,16 @@ func main() {
 	if filename == "" {
 		fmt.Fprintln(os.Stderr, "ledger: no journal file specified.  Please use option -f")
 		os.Exit(1)
+	}
+	if txtEndDate != "" {
+		if len(txtEndDate) == 10 {
+			txtEndDate = txtEndDate + "/23:59:59"
+		}
+		endDate, err = ledger.GetDate(txtEndDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ledger: %s\n", err.Error())
+			os.Exit(1)
+		}
 	}
 	fmt.Printf("%v\n", filename)
 	if len(flag.Args()) < 1 {
@@ -175,6 +191,16 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
 		os.Exit(1)
+	}
+	if endDate != (time.Time{}) {
+		for i := range Ledger.Accounts {
+			for j, s := range Ledger.Accounts[i].Splits {
+				if s.Time.After(endDate) {
+					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[:j]
+					break
+				}
+			}
+		}
 	}
 	if err = commands[flag.Args()[0]](flag.Args()[1:]); err != nil {
 		log.Fatalf("ledger %s: %v\n", flag.Args()[0], err.Error())
