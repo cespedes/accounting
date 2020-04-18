@@ -349,6 +349,26 @@ func (b *Balance) Add(v Value) {
 	*b = append(*b, v)
 }
 
+// Sub substracts a value to a balance.
+func (b *Balance) Sub(v Value) {
+	v.Amount = -v.Amount
+	b.Add(v)
+}
+
+// AddBalance adds one balance to another
+func (b *Balance) AddBalance(b2 Balance) {
+	for _, v := range b2 {
+		b.Add(v)
+	}
+}
+
+// SubBalance substracts one balance from another
+func (b *Balance) SubBalance(b2 Balance) {
+	for _, v := range b2 {
+		b.Sub(v)
+	}
+}
+
 // Dup duplicates a Balance.
 func (b Balance) Dup() Balance {
 	res := Balance{}
@@ -391,6 +411,7 @@ func (l *Ledger) Fill() error {
 			if j >= len(l.Transactions[i].Splits) {
 				break
 			}
+			l.Transactions[i].Splits[j].Balance = nil
 			if l.Transactions[i].Splits[j].Account == &transferAccount {
 				l.Transactions[i].Splits[j] = l.Transactions[i].Splits[len(l.Transactions[i].Splits)-1]
 				l.Transactions[i].Splits = l.Transactions[i].Splits[:len(l.Transactions[i].Splits)-1]
@@ -501,7 +522,7 @@ func (l *Ledger) Fill() error {
 		for i := 0; i < len(l.Accounts); i++ {
 			var b Balance
 			if iAccounts[i] > 0 {
-				b = l.Accounts[i].Splits[iAccounts[i]-1].Balance
+				b = l.Accounts[i].Splits[iAccounts[i]-1].Balance.Dup()
 			}
 			for ; iAccounts[i] < len(l.Accounts[i].Splits); iAccounts[i]++ {
 				finished = false

@@ -15,12 +15,15 @@ import (
 var Ledger *accounting.Ledger
 
 var commands = map[string]func(args []string) error{
-	"accounts": runAccounts,
-	"balance":  runBalance,
-	"bal":      runBalance,
-	"b":        runBalance,
-	"stats":    runStats,
-	"print":    runPrint,
+	"accounts":        runAccounts,
+	"a":               runAccounts,
+	"balance":         runBalance,
+	"bal":             runBalance,
+	"b":               runBalance,
+	"stats":           runStats,
+	"print":           runPrint,
+	"incomestatement": runIncomeStatement,
+	"is":              runIncomeStatement,
 }
 
 func runAccounts(args []string) error {
@@ -106,10 +109,7 @@ func runBalance(args []string) error {
 			fmt.Printf("%*.0s%s\n", maxLength+1+2*a.Level, " ", a.Name)
 		}
 	}
-	for i := 0; i < maxLength; i++ {
-		fmt.Print("-")
-	}
-	fmt.Println()
+	fmt.Println(strings.Repeat("-", maxLength))
 	for _, v := range b {
 		fmt.Printf("%*.*s\n", maxLength, maxLength, v.String())
 	}
@@ -150,6 +150,82 @@ func runPrint(args []string) error {
 	return nil
 }
 
+func runIncomeStatement(args []string) error {
+	var incomes, expenses []struct {
+		name    string
+		balance string
+	}
+	var income, expense, net accounting.Balance
+	var nameLen = 8
+	var balanceLen = 1
+	for _, a := range Ledger.Accounts {
+		if strings.HasPrefix(a.FullName(), "Income:") {
+			if len(a.Splits) > 0 {
+				b := a.Splits[0].Balance.Dup()
+				b.SubBalance(a.Splits[len(a.Splits)-1].Balance)
+				b.Sub(a.Splits[0].Value)
+				incomes = append(incomes, struct {
+					name    string
+					balance string
+				}{a.FullName(), b.String()})
+				income.AddBalance(b)
+			}
+		}
+		if strings.HasPrefix(a.FullName(), "Expense:") {
+			if len(a.Splits) > 0 {
+				log.Printf("expense=%s b1=%s b2=%s v=%s", a.Name, a.Splits[0].Balance, a.Splits[len(a.Splits)-1].Balance, a.Splits[0].Value)
+				b := a.Splits[len(a.Splits)-1].Balance.Dup()
+				b.SubBalance(a.Splits[0].Balance)
+				b.Add(a.Splits[0].Value)
+				expenses = append(expenses, struct {
+					name    string
+					balance string
+				}{a.FullName(), b.String()})
+				expense.AddBalance(b)
+			}
+		}
+	}
+	for _, i := range incomes {
+		if len(i.name) > nameLen {
+			nameLen = len(i.name)
+		}
+		if len(i.balance) > balanceLen {
+			balanceLen = len(i.balance)
+		}
+	}
+	for _, i := range expenses {
+		if len(i.name) > nameLen {
+			nameLen = len(i.name)
+		}
+		if len(i.balance) > balanceLen {
+			balanceLen = len(i.balance)
+		}
+	}
+	fmt.Println("Income Statement")
+	fmt.Println()
+	fmt.Print(strings.Repeat("=", nameLen+2), "++", strings.Repeat("=", balanceLen+2), "\n")
+	fmt.Printf(" %-*s ||\n", nameLen, "Revenues")
+	fmt.Print(strings.Repeat("-", nameLen+2), "++", strings.Repeat("-", balanceLen+2), "\n")
+	for _, i := range incomes {
+		fmt.Printf(" %-*s || %*s\n", nameLen, i.name, balanceLen, i.balance)
+	}
+	fmt.Print(strings.Repeat("-", nameLen+2), "++", strings.Repeat("-", balanceLen+2), "\n")
+	fmt.Printf(" %s || %*s\n", strings.Repeat(" ", nameLen), balanceLen, income)
+	fmt.Print(strings.Repeat("=", nameLen+2), "++", strings.Repeat("=", balanceLen+2), "\n")
+	fmt.Printf(" %-*s ||\n", nameLen, "Expenses")
+	fmt.Print(strings.Repeat("-", nameLen+2), "++", strings.Repeat("-", balanceLen+2), "\n")
+	for _, e := range expenses {
+		fmt.Printf(" %-*s || %*s\n", nameLen, e.name, balanceLen, e.balance)
+	}
+	fmt.Print(strings.Repeat("-", nameLen+2), "++", strings.Repeat("-", balanceLen+2), "\n")
+	fmt.Printf(" %s || %*s\n", strings.Repeat(" ", nameLen), balanceLen, expense)
+	fmt.Print(strings.Repeat("=", nameLen+2), "++", strings.Repeat("=", balanceLen+2), "\n")
+	net = income.Dup()
+	net.SubBalance(expense)
+	fmt.Printf(" %-*s || %*s\n", nameLen, "Net:", balanceLen, net)
+	return nil
+}
+
 func Usage() {
 	log.Fatalln("usage: ledger [options] <command> [args]")
 }
@@ -157,9 +233,10 @@ func Usage() {
 func main() {
 	var err error
 	var filename string
-	var txtEndDate string
-	var endDate time.Time
+	var txtBeginDate, txtEndDate string
+	var beginDate, endDate time.Time
 	flag.StringVar(&filename, "f", "", "journal file")
+	flag.StringVar(&txtBeginDate, "b", "", "begin date")
 	flag.StringVar(&txtEndDate, "e", "", "end date")
 	flag.Parse()
 	if filename == "" {
@@ -168,6 +245,16 @@ func main() {
 	if filename == "" {
 		fmt.Fprintln(os.Stderr, "ledger: no journal file specified.  Please use option -f")
 		os.Exit(1)
+	}
+	if txtBeginDate != "" {
+		if len(txtBeginDate) == 10 {
+			txtBeginDate = txtBeginDate + "/00:00:00"
+		}
+		beginDate, err = ledger.GetDate(txtBeginDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ledger: %s\n", err.Error())
+			os.Exit(1)
+		}
 	}
 	if txtEndDate != "" {
 		if len(txtEndDate) == 10 {
@@ -192,7 +279,41 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
 		os.Exit(1)
 	}
+	if beginDate != (time.Time{}) {
+		for i := len(Ledger.Transactions) - 1; i >= 0; i-- {
+			if Ledger.Transactions[i].Time.Before(beginDate) {
+				Ledger.Transactions = Ledger.Transactions[i+1:]
+				break
+			}
+		}
+		//for i, p := range Ledger.Prices {
+		//	if p.Time.After(endDate) {
+		//		Ledger.Prices = Ledger.Prices[:i]
+		//		break
+		//	}
+		//}
+		for i := range Ledger.Accounts {
+			for j := len(Ledger.Accounts[i].Splits) - 1; j >= 0; j-- {
+				if Ledger.Accounts[i].Splits[j].Time.Before(beginDate) {
+					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[j+1:]
+					break
+				}
+			}
+		}
+	}
 	if endDate != (time.Time{}) {
+		for i, t := range Ledger.Transactions {
+			if t.Time.After(endDate) {
+				Ledger.Transactions = Ledger.Transactions[:i]
+				break
+			}
+		}
+		for i, p := range Ledger.Prices {
+			if p.Time.After(endDate) {
+				Ledger.Prices = Ledger.Prices[:i]
+				break
+			}
+		}
 		for i := range Ledger.Accounts {
 			for j, s := range Ledger.Accounts[i].Splits {
 				if s.Time.After(endDate) {

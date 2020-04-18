@@ -118,6 +118,7 @@ func Export(out io.Writer, ledger *accounting.Ledger) {
 				if len(ledger.Comments[s]) > 0 {
 					comments = append(comments, ledger.Comments[s]...)
 				}
+				comments = append(comments, " ["+s.Balance.String()+"]")
 				if len(comments) > 0 {
 					fmt.Fprintf(out, " ; %s", comments[0])
 				}
