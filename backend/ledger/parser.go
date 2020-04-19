@@ -186,7 +186,7 @@ func (l *ledgerConnection) readJournal() error {
 	l.ledger.Comments = make(map[interface{}][]string)
 	l.ledger.Assertions = make(map[*accounting.Split]accounting.Value)
 	l.ledger.SplitPrices = make(map[*accounting.Split]accounting.Value)
-	l.defaultCurrency = nil
+	l.ledger.DefaultCurrency = nil
 	s := NewScanner()
 	s.NewFile(l.file)
 
@@ -288,7 +288,7 @@ func (l *ledgerConnection) readJournal() error {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
-			l.defaultCurrency = price.Currency
+			l.ledger.DefaultCurrency = price.Currency
 			continue
 		}
 		if !indented && word == "commodity" {
@@ -475,10 +475,10 @@ done:
 	}
 	newCurrency := true
 	if value.Currency.Name == "" {
-		if l.defaultCurrency == nil {
-			l.defaultCurrency = value.Currency
+		if l.ledger.DefaultCurrency == nil {
+			l.ledger.DefaultCurrency = value.Currency
 		} else {
-			value.Currency = l.defaultCurrency
+			value.Currency = l.ledger.DefaultCurrency
 			newCurrency = false
 		}
 	} else {

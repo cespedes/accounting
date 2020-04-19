@@ -82,8 +82,8 @@ func (value Value) getString(full bool) string {
 		result += "-"
 		value.Amount = -value.Amount
 	}
-	i := value.Amount / 100_000_000
-	d := value.Amount % 100_000_000
+	i := value.Amount / U
+	d := value.Amount % U
 	if c.Decimal == "" { // shouldn't happen
 		c.Decimal = "."
 	}
@@ -331,6 +331,14 @@ func (l *Ledger) GetCurrency(s string) *Currency {
 	return &currency
 }
 
+// Mul multiplies a value times the amount of another.
+func (value *Value) Mul(v2 Value) {
+	i := big.NewInt(value.Amount)
+	i.Mul(i, big.NewInt(v2.Amount))
+	i.Div(i, big.NewInt(U))
+	value.Amount = i.Int64()
+}
+
 // Add adds a value to a balance.
 func (b *Balance) Add(v Value) {
 	if v.Amount == 0 {
@@ -383,6 +391,41 @@ func insertAccount(where *[]*Account, account *Account) {
 	for _, a := range account.Children {
 		insertAccount(where, a)
 	}
+}
+
+// Convert returns a value to another currency.
+func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
+	if v.Currency == currency {
+		return v
+	}
+	var prevTime, nextTime time.Time
+	var prevValue, nextValue Value
+	prevValue = v
+	for _, p := range l.Prices {
+		if p.Currency != v.Currency || p.Value.Currency != currency {
+			continue
+		}
+		if p.Time == when {
+			p.Value.Mul(v)
+			return p.Value
+		}
+		if p.Time.Before(when) {
+			prevTime = p.Time
+			prevValue = p.Value
+			continue
+		}
+		nextTime = p.Time
+		nextValue = p.Value
+	}
+	if nextTime == (time.Time{}) {
+		prevValue.Mul(v)
+		return prevValue
+	}
+	d1 := when.Sub(prevTime)
+	d2 := nextTime.Sub(prevTime)
+	v.Amount = (nextValue.Amount - prevValue.Amount) / int64(d2) * int64(d1)
+	prevValue.Mul(v)
+	return prevValue
 }
 
 // Fill re-calculates all the automatic fields in all the accounting data.

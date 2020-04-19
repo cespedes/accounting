@@ -85,6 +85,12 @@ func runBalance(args []string) error {
 	for _, a := range accounts {
 		var thisBal accounting.Balance
 		if len(a.Account.Splits) > 0 {
+			if flags.cost {
+				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
+					thisBal.Add(Ledger.Convert(v, time.Now(), Ledger.DefaultCurrency))
+				}
+				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
+			}
 			thisBal = a.Account.Splits[len(a.Account.Splits)-1].Balance
 			for _, v := range thisBal {
 				length := len(v.String())
@@ -230,6 +236,10 @@ func Usage() {
 	log.Fatalln("usage: ledger [options] <command> [args]")
 }
 
+var flags struct {
+	cost bool
+}
+
 func main() {
 	var err error
 	var filename string
@@ -238,6 +248,7 @@ func main() {
 	flag.StringVar(&filename, "f", "", "journal file")
 	flag.StringVar(&txtBeginDate, "b", "", "begin date")
 	flag.StringVar(&txtEndDate, "e", "", "end date")
+	flag.BoolVar(&flags.cost, "cost", false, "show amounts converted to their cost")
 	flag.Parse()
 	if filename == "" {
 		filename = os.Getenv("LEDGER_FILE")

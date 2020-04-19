@@ -16,10 +16,9 @@ func init() {
 }
 
 type ledgerConnection struct {
-	file            string
-	defaultCurrency *accounting.Currency
-	backend         *accounting.Backend
-	ledger          *accounting.Ledger
+	file    string
+	backend *accounting.Backend
+	ledger  *accounting.Ledger
 }
 
 func (driver) Open(name string, backend *accounting.Backend) (accounting.Connection, error) {

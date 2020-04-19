@@ -7,14 +7,15 @@ const U = 100_000_000
 
 // Ledger stores all the accounts and transactions in one accounting.
 type Ledger struct {
-	connection   Connection
-	Accounts     []*Account
-	Transactions []*Transaction           // sorted by Time.
-	Currencies   []*Currency              // can be empty.
-	Prices       []*Price                 // can be empty; sorted by Time.
-	Comments     map[interface{}][]string // Comments in Accounts, Transactions, Currencies or Prices.
-	Assertions   map[*Split]Value         // Value that should be in an account after one split.
-	SplitPrices  map[*Split]Value         // Price for the value in a split, in another currency.
+	connection      Connection
+	Accounts        []*Account
+	Transactions    []*Transaction           // sorted by Time.
+	Currencies      []*Currency              // can be empty.
+	Prices          []*Price                 // can be empty; sorted by Time.
+	Comments        map[interface{}][]string // Comments in Accounts, Transactions, Currencies or Prices.
+	Assertions      map[*Split]Value         // Value that should be in an account after one split.
+	SplitPrices     map[*Split]Value         // Price for the value in a split, in another currency.
+	DefaultCurrency *Currency                // Default currency.
 	// Tags            map[interface{}][]Tag
 	// TagsByName      map[string][]struct {Value string; Place interface{}}
 }
