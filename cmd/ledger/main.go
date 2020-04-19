@@ -66,7 +66,7 @@ func insertAccount(where *[]account, name string, level int, a *accounting.Accou
 
 func runBalance(args []string) error {
 	var maxLength int
-	var b accounting.Balance
+	var total accounting.Balance
 	var accounts []account
 	if len(args) == 0 {
 		for _, a := range Ledger.Accounts {
@@ -87,7 +87,7 @@ func runBalance(args []string) error {
 		if len(a.Account.Splits) > 0 {
 			if flags.cost {
 				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
-					thisBal.Add(Ledger.Convert(v, time.Now(), Ledger.DefaultCurrency))
+					thisBal.Add(Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency))
 				}
 				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
 			}
@@ -97,8 +97,14 @@ func runBalance(args []string) error {
 				if length > maxLength {
 					maxLength = length
 				}
-				b.Add(v)
+				total.Add(v)
 			}
+		}
+	}
+	for _, v := range total {
+		length := len(v.String())
+		if length > maxLength {
+			maxLength = length
 		}
 	}
 	for _, a := range accounts {
@@ -116,7 +122,7 @@ func runBalance(args []string) error {
 		}
 	}
 	fmt.Println(strings.Repeat("-", maxLength))
-	for _, v := range b {
+	for _, v := range total {
 		fmt.Printf("%*.*s\n", maxLength, maxLength, v.String())
 	}
 	return nil
@@ -237,14 +243,16 @@ func Usage() {
 }
 
 var flags struct {
-	cost bool
+	cost    bool
+	endDate time.Time
 }
 
 func main() {
 	var err error
 	var filename string
 	var txtBeginDate, txtEndDate string
-	var beginDate, endDate time.Time
+	var beginDate time.Time
+	flags.endDate = time.Now()
 	flag.StringVar(&filename, "f", "", "journal file")
 	flag.StringVar(&txtBeginDate, "b", "", "begin date")
 	flag.StringVar(&txtEndDate, "e", "", "end date")
@@ -271,7 +279,7 @@ func main() {
 		if len(txtEndDate) == 10 {
 			txtEndDate = txtEndDate + "/23:59:59"
 		}
-		endDate, err = ledger.GetDate(txtEndDate)
+		flags.endDate, err = ledger.GetDate(txtEndDate)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ledger: %s\n", err.Error())
 			os.Exit(1)
@@ -312,22 +320,16 @@ func main() {
 			}
 		}
 	}
-	if endDate != (time.Time{}) {
+	if txtEndDate != "" {
 		for i, t := range Ledger.Transactions {
-			if t.Time.After(endDate) {
+			if t.Time.After(flags.endDate) {
 				Ledger.Transactions = Ledger.Transactions[:i]
-				break
-			}
-		}
-		for i, p := range Ledger.Prices {
-			if p.Time.After(endDate) {
-				Ledger.Prices = Ledger.Prices[:i]
 				break
 			}
 		}
 		for i := range Ledger.Accounts {
 			for j, s := range Ledger.Accounts[i].Splits {
-				if s.Time.After(endDate) {
+				if s.Time.After(flags.endDate) {
 					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[:j]
 					break
 				}

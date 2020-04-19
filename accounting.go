@@ -395,7 +395,9 @@ func insertAccount(where *[]*Account, account *Account) {
 
 // Convert returns a value to another currency.
 func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
+	//fmt.Printf("Convert(%s, %s, %s)", v, when, currency.Name)
 	if v.Currency == currency {
+		//fmt.Printf(" (1) = %s\n", v)
 		return v
 	}
 	var prevTime, nextTime time.Time
@@ -407,6 +409,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		}
 		if p.Time == when {
 			p.Value.Mul(v)
+			//fmt.Printf(" (2) = %s\n", p.Value)
 			return p.Value
 		}
 		if p.Time.Before(when) {
@@ -416,15 +419,49 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		}
 		nextTime = p.Time
 		nextValue = p.Value
+		break
+	}
+	if prevTime == (time.Time{}) && nextTime == (time.Time{}) {
+		for _, p := range l.Prices {
+			if p.Currency != v.Currency {
+				continue
+			}
+			if p.Time.Before(when) {
+				prevTime = p.Time
+				prevValue = p.Value
+				continue
+			}
+			if p.Time.Sub(when) < when.Sub(prevTime) {
+				prevTime = p.Time
+				prevValue = p.Value
+			}
+			break
+		}
+		if prevTime == (time.Time{}) {
+			//fmt.Printf(" (3) = %s\n", v)
+			return v
+		}
+		return l.Convert(l.Convert(v, when, prevValue.Currency), when, currency)
 	}
 	if nextTime == (time.Time{}) {
 		prevValue.Mul(v)
+		//fmt.Printf(" (4) = %s\n", prevValue)
 		return prevValue
+	}
+	if prevTime == (time.Time{}) {
+		nextValue.Mul(v)
+		//fmt.Printf(" (5) = %s\n", nextValue)
+		return nextValue
 	}
 	d1 := when.Sub(prevTime)
 	d2 := nextTime.Sub(prevTime)
-	v.Amount = (nextValue.Amount - prevValue.Amount) / int64(d2) * int64(d1)
+	i := big.NewInt(nextValue.Amount - prevValue.Amount)
+	i.Mul(i, big.NewInt(int64(d1)))
+	i.Quo(i, big.NewInt(int64(d2)))
+	i.Add(i, big.NewInt(prevValue.Amount))
+	prevValue.Amount = i.Int64()
 	prevValue.Mul(v)
+	// fmt.Printf(" (6) = %s (%s .. %s)\n", prevValue, prevTime, nextTime)
 	return prevValue
 }
 
@@ -609,6 +646,31 @@ func (l *Ledger) Fill() error {
 	}
 	if !finished && deadlock {
 		return fmt.Errorf("%s: deadlock (cannot balance transaction)", l.Transactions[iTransactions].ID)
+	}
+
+	// Adding prices from splits
+	for s, v := range l.SplitPrices {
+		price := new(Price)
+		price.Time = *s.Time
+		price.Currency = s.Value.Currency
+		i := big.NewInt(U)
+		i.Mul(i, big.NewInt(v.Amount))
+		i.Quo(i, big.NewInt(s.Value.Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = v.Currency
+		l.Prices = append(l.Prices, price)
+		l.Comments[price] = append(l.Comments[price], "automatic")
+
+		price = new(Price)
+		price.Time = *s.Time
+		price.Currency = v.Currency
+		i = big.NewInt(U)
+		i.Mul(i, big.NewInt(s.Value.Amount))
+		i.Quo(i, big.NewInt(v.Amount))
+		price.Value.Amount = i.Int64()
+		price.Value.Currency = s.Value.Currency
+		l.Prices = append(l.Prices, price)
+		l.Comments[price] = append(l.Comments[price], "automatic")
 	}
 
 	// This must be executed after all the balances
