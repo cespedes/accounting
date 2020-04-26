@@ -395,9 +395,8 @@ func insertAccount(where *[]*Account, account *Account) {
 
 // Convert returns a value to another currency.
 func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
-	//fmt.Printf("Convert(%s, %s, %s)", v, when, currency.Name)
 	if v.Currency == currency {
-		//fmt.Printf(" (1) = %s\n", v)
+		//fmt.Printf("Convert(%s,%s,%s) = %s (1)\n", v, when.Format("2006-01-02"), currency.Name, v)
 		return v
 	}
 	var prevTime, nextTime time.Time
@@ -409,7 +408,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		}
 		if p.Time == when {
 			p.Value.Mul(v)
-			//fmt.Printf(" (2) = %s\n", p.Value)
+			//fmt.Printf("Convert(%s,%s,%s) = %s (2)\n", v, when.Format("2006-01-02"), currency.Name, p.Value)
 			return p.Value
 		}
 		if p.Time.Before(when) {
@@ -438,19 +437,19 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 			break
 		}
 		if prevTime == (time.Time{}) {
-			//fmt.Printf(" (3) = %s\n", v)
+			//fmt.Printf("Convert(%s,%s,%s) = %s (3)\n", v, when.Format("2006-01-02"), currency.Name, v)
 			return v
 		}
 		return l.Convert(l.Convert(v, when, prevValue.Currency), when, currency)
 	}
 	if nextTime == (time.Time{}) {
 		prevValue.Mul(v)
-		//fmt.Printf(" (4) = %s\n", prevValue)
+		//fmt.Printf("Convert(%s,%s,%s) = %s (4)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
 		return prevValue
 	}
 	if prevTime == (time.Time{}) {
 		nextValue.Mul(v)
-		//fmt.Printf(" (5) = %s\n", nextValue)
+		//fmt.Printf("Convert(%s,%s,%s) = %s (5)\n", v, when.Format("2006-01-02"), currency.Name, nextValue)
 		return nextValue
 	}
 	d1 := when.Sub(prevTime)
@@ -461,7 +460,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 	i.Add(i, big.NewInt(prevValue.Amount))
 	prevValue.Amount = i.Int64()
 	prevValue.Mul(v)
-	// fmt.Printf(" (6) = %s (%s .. %s)\n", prevValue, prevTime, nextTime)
+	//fmt.Printf("Convert(%s,%s,%s) = %s (6)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
 	return prevValue
 }
 
@@ -487,6 +486,7 @@ func (l *Ledger) Fill() error {
 
 	// Remove splits with transferAccount, if any:
 	for i := range l.Transactions {
+		// TODO: this may be buggy!
 		for j := range l.Transactions[i].Splits {
 			if j >= len(l.Transactions[i].Splits) {
 				break

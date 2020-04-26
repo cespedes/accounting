@@ -214,7 +214,7 @@ func (l *ledgerConnection) readJournal() error {
 		if text[0] == '*' || text[0] == '#' || text[0] == ';' {
 			comment = strings.TrimSpace(text[1:])
 			if !indented {
-				fmt.Printf("%s:%d: File comment: \"%s\"\n", line.Filename, line.LineNum, comment)
+				//fmt.Printf("%s:%d: File comment: \"%s\"\n", line.Filename, line.LineNum, comment)
 			} else {
 				switch lastLine {
 				case lineAccount:
