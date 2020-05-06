@@ -318,17 +318,17 @@ func SortAccounts(accounts []*Account) []*Account {
 	return accounts
 }
 
-// GetCurrency returns a Currency, given its name
-func (l *Ledger) GetCurrency(s string) *Currency {
+// GetCurrency returns a Currency, given its name, and whether it is a new one or not
+func (l *Ledger) GetCurrency(s string) (*Currency, bool) {
 	for i := range l.Currencies {
 		if s == l.Currencies[i].Name {
-			return l.Currencies[i]
+			return l.Currencies[i], false
 		}
 	}
 	var currency Currency
 	currency.Name = s
 	l.Currencies = append(l.Currencies, &currency)
-	return &currency
+	return &currency, true
 }
 
 // Mul multiplies a value times the amount of another.

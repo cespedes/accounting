@@ -268,8 +268,12 @@ func (l *ledgerConnection) readJournal() error {
 			}
 			currency, rest := firstWord(rest)
 			price.ID = &ID{filename: line.Filename, lineNum: line.LineNum}
-			price.Currency = l.ledger.GetCurrency(currency)
-			price.Value, err = l.getValue(rest)
+			var newCurrency bool
+			price.Currency, newCurrency = l.ledger.GetCurrency(currency)
+			if newCurrency {
+				log.Printf("%s:%d undefined currency %s", line.Filename, line.LineNum, price.Currency.Name)
+			}
+			price.Value, err, newCurrency = l.getValue(rest)
 			if comment != "" {
 				l.addComment(&price, comment)
 			}
@@ -277,13 +281,16 @@ func (l *ledgerConnection) readJournal() error {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
 			}
+			if newCurrency {
+				log.Printf("%s:%d undefined currency %s", line.Filename, line.LineNum, price.Value.Currency.Name)
+			}
 			l.ledger.Prices = append(l.ledger.Prices, &price)
 			lastLine = linePrice
 			continue
 		}
 		if !indented && word == "D" {
 			lastLine = lineDefaultCurrency
-			price, err := l.getValue(rest)
+			price, err, _ := l.getValue(rest)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
@@ -293,7 +300,7 @@ func (l *ledgerConnection) readJournal() error {
 		}
 		if !indented && word == "commodity" {
 			lastLine = lineCommodity
-			_, err := l.getValue(rest)
+			_, err, _ := l.getValue(rest)
 			if err != nil {
 				log.Printf("%s:%d: Syntax error: %s", line.Filename, line.LineNum, err.Error())
 				continue
@@ -375,17 +382,24 @@ func (l *ledgerConnection) readJournal() error {
 						valueEnd = valueStart + i
 					}
 				}
-				s.Value, err = l.getValue(strings.TrimSpace(text[valueStart:valueEnd]))
+				var newCurrency bool
+				s.Value, err, newCurrency = l.getValue(strings.TrimSpace(text[valueStart:valueEnd]))
 				if err != nil {
 					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 					continue
 				}
+				if newCurrency {
+					log.Printf("%s:%d undefined currency %s", line.Filename, line.LineNum, s.Value.Currency.Name)
+				}
 			}
 			if hasPriceRel || hasPriceAbs {
-				value, err := l.getValue(strings.TrimSpace(text[priceStart:priceEnd]))
+				value, err, newCurrency := l.getValue(strings.TrimSpace(text[priceStart:priceEnd]))
 				if err != nil {
 					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 					continue
+				}
+				if newCurrency {
+					log.Printf("%s:%d undefined currency %s", line.Filename, line.LineNum, value.Currency.Name)
 				}
 				if hasPriceRel {
 					k := big.NewInt(s.Value.Amount)
@@ -396,10 +410,13 @@ func (l *ledgerConnection) readJournal() error {
 				l.ledger.SplitPrices[s] = value
 			}
 			if hasAssertion {
-				value, err := l.getValue(strings.TrimSpace(text[assertionStart:assertionEnd]))
+				value, err, newCurrency := l.getValue(strings.TrimSpace(text[assertionStart:assertionEnd]))
 				if err != nil {
 					log.Printf("%s:%d: %s\n", line.Filename, line.LineNum, err.Error())
 					continue
+				}
+				if newCurrency {
+					log.Printf("%s:%d undefined currency %s", line.Filename, line.LineNum, value.Currency.Name)
 				}
 				l.ledger.Assertions[s] = value
 			}
@@ -431,13 +448,13 @@ func (l *ledgerConnection) getAccount(filename string, lineNum int, str string) 
 	return &account, true
 }
 
-func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
+func (l *ledgerConnection) getValue(s string) (accounting.Value, error, bool) {
 	var value accounting.Value
 	value.Currency = new(accounting.Currency)
 	var sAmount string
 
 	if s == "" {
-		return accounting.Value{}, nil // empty value == zero value
+		return accounting.Value{}, nil, false // empty value == zero value
 	}
 	if s[0] == '-' || s[0] == '+' || (s[0] >= '0' && s[0] <= '9') {
 		// first amount, then currency
@@ -466,12 +483,12 @@ func (l *ledgerConnection) getValue(s string) (accounting.Value, error) {
 			}
 		}
 		if sAmount == "" {
-			return value, errors.New("syntax error: currency without amount")
+			return value, errors.New("syntax error: currency without amount"), false
 		}
 	}
 done:
 	if strings.ContainsAny(value.Currency.Name, "=@") {
-		return value, errors.New("syntax error: invalid character in currency")
+		return value, errors.New("syntax error: invalid character in currency"), false
 	}
 	newCurrency := true
 	if value.Currency.Name == "" {
@@ -499,10 +516,13 @@ done2:
 	} else if sAmount[0] == '+' {
 		sAmount = sAmount[1:]
 	}
+	if len(sAmount) == 0 {
+		return value, errors.New("syntax error: empty amount"), newCurrency
+	}
 	var punct string
 	punctPos, thousandPos, decimalPos := -1, -1, -1
 	if c := sAmount[len(sAmount)-1]; c < '0' || c > '9' {
-		return value, errors.New("syntax error: amount must end with a digit")
+		return value, errors.New("syntax error: amount must end with a digit"), newCurrency
 	}
 	for i, c := range sAmount {
 		if c >= '0' && c <= '9' {
@@ -511,10 +531,10 @@ done2:
 			continue
 		}
 		if i == 0 {
-			return value, fmt.Errorf("syntax error: wrong position for punctuation mark '%c'", c)
+			return value, fmt.Errorf("syntax error: wrong position for punctuation mark '%c'", c), newCurrency
 		}
 		if c == '-' || c == '+' {
-			return value, fmt.Errorf("syntax error: wrong punctuation mark '%c'", c)
+			return value, fmt.Errorf("syntax error: wrong punctuation mark '%c'", c), newCurrency
 		}
 		if punct == string(c) {
 			// we have seen this before: this must be a thousand sign
@@ -525,7 +545,7 @@ done2:
 		if value.Currency.Thousand == string(c) || (value.Currency.Thousand == "" && value.Currency.Decimal != "" && value.Currency.Decimal != string(c)) {
 			value.Currency.Thousand = string(c)
 			if (thousandPos == -1 && i > 3) || i-thousandPos != 4 || decimalPos > -1 {
-				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand)
+				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand), newCurrency
 			}
 			thousandPos = i
 			continue
@@ -540,16 +560,16 @@ done2:
 		if value.Currency.Decimal == string(c) || (value.Currency.Decimal == "" && value.Currency.Thousand != "" && value.Currency.Thousand != string(c)) {
 			value.Currency.Decimal = string(c)
 			if decimalPos > -1 {
-				return value, fmt.Errorf("syntax error: more than one decimal sign '%s'", value.Currency.Decimal)
+				return value, fmt.Errorf("syntax error: more than one decimal sign '%s'", value.Currency.Decimal), newCurrency
 			}
 			if thousandPos > -1 && i-thousandPos != 4 {
-				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand)
+				return value, fmt.Errorf("syntax error: wrong position for thousand sign '%s'", value.Currency.Thousand), newCurrency
 			}
 			decimalPos = i
 			continue
 		}
 		if value.Currency.Decimal != "" && value.Currency.Thousand != "" {
-			return value, fmt.Errorf("syntax error: unknown punctuacion '%c' (thousand='%s', decimal='%s')", c, value.Currency.Thousand, value.Currency.Decimal)
+			return value, fmt.Errorf("syntax error: unknown punctuacion '%c' (thousand='%s', decimal='%s')", c, value.Currency.Thousand, value.Currency.Decimal), newCurrency
 		}
 		// 'c' could be a decimal sign or a thousand sign
 		if i > 3 {
@@ -566,7 +586,7 @@ done2:
 		punct, punctPos = "", -1
 	}
 	if punct != "" {
-		return value, fmt.Errorf("syntax error: punctuation '%s' can be a thousand or a decimal", punct)
+		return value, fmt.Errorf("syntax error: punctuation '%s' can be a thousand or a decimal", punct), newCurrency
 	}
 	shift := 0
 	if decimalPos == -1 {
@@ -579,7 +599,7 @@ done2:
 		shift = 8 - shift
 	}
 	if shift < 0 || shift > 8 {
-		return value, fmt.Errorf("syntax error: too many decimal numbers")
+		return value, fmt.Errorf("syntax error: too many decimal numbers"), newCurrency
 	}
 	for i := 0; i < shift; i++ {
 		value.Amount *= 10
@@ -592,7 +612,7 @@ done2:
 			value.Currency.Decimal = ","
 		}
 	}
-	return value, nil
+	return value, nil, newCurrency
 }
 
 func firstWord(s string) (string, string) {
