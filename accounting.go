@@ -204,6 +204,7 @@ func (l *Ledger) Clone() *Ledger {
 		na.Level = a.Level
 		na.Name = a.Name
 		na.Code = a.Code
+		na.Splits = make([]*Split, len(a.Splits))
 		for i := range a.Splits {
 			na.Splits[i] = mapSplits[a.Splits[i]]
 		}
@@ -220,13 +221,14 @@ func (l *Ledger) Clone() *Ledger {
 		nt.ID = t.ID
 		nt.Time = t.Time
 		nt.Description = t.Description
+		nt.Splits = make([]*Split, len(t.Splits))
 		for j, s := range t.Splits {
 			ns := mapSplits[s]
 			nt.Splits[j] = ns
 			ns.ID = s.ID
 			ns.Account = mapAccounts[s.Account]
 			ns.Transaction = mapTransactions[s.Transaction]
-			switch ns.Time {
+			switch s.Time {
 			case &s.Transaction.Time:
 				ns.Time = &ns.Transaction.Time
 			case nil:
@@ -244,6 +246,7 @@ func (l *Ledger) Clone() *Ledger {
 			}
 		}
 	}
+	res.Currencies = make([]*Currency, len(l.Currencies))
 	for i, c := range l.Currencies {
 		nc := mapCurrencies[c]
 		res.Currencies[i] = nc
@@ -256,6 +259,7 @@ func (l *Ledger) Clone() *Ledger {
 		nc.Precision = c.Precision
 		nc.ISIN = c.ISIN
 	}
+	res.Prices = make([]*Price, len(l.Prices))
 	for i, p := range l.Prices {
 		np := mapPrices[p]
 		res.Prices[i] = np

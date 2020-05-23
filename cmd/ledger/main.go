@@ -13,9 +13,7 @@ import (
 	"github.com/cespedes/tableview"
 )
 
-var Ledger *accounting.Ledger
-
-var commands = map[string]func(args []string) error{
+var commands = map[string]func(ledger *accounting.Ledger, args []string) error{
 	"accounts":        runAccounts,
 	"a":               runAccounts,
 	"balance":         runBalance,
@@ -29,13 +27,13 @@ var commands = map[string]func(args []string) error{
 	"price":           runPrice,
 }
 
-func runAccounts(args []string) error {
+func runAccounts(L *accounting.Ledger, args []string) error {
 	var treeFlag bool
 	f := flag.NewFlagSet("accounts", flag.ExitOnError)
 	f.BoolVar(&treeFlag, "tree", false, "show short account names, as a tree")
 	f.Parse(args)
 
-	for _, a := range Ledger.Accounts {
+	for _, a := range L.Accounts {
 		if treeFlag {
 			fmt.Printf("%*.0s%s\n", 2*a.Level, " ", a.FullName())
 		} else {
@@ -67,16 +65,16 @@ func insertAccount(where *[]account, name string, level int, a *accounting.Accou
 	}
 }
 
-func runBalance(args []string) error {
+func runBalance(L *accounting.Ledger, args []string) error {
 	var maxLength int
 	var total accounting.Balance
 	var accounts []account
 	if len(args) == 0 {
-		for _, a := range Ledger.Accounts {
+		for _, a := range L.Accounts {
 			accounts = append(accounts, account{Name: a.Name, Level: a.Level, Account: a})
 		}
 	} else {
-		for _, a := range Ledger.Accounts {
+		for _, a := range L.Accounts {
 			for _, b := range args {
 				if strings.Contains(strings.ToLower(a.FullName()), strings.ToLower(b)) {
 					insertAccount(&accounts, a.FullName(), 0, a)
@@ -90,7 +88,7 @@ func runBalance(args []string) error {
 		if len(a.Account.Splits) > 0 {
 			if flags.market {
 				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
-					thisBal.Add(Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency))
+					thisBal.Add(L.Convert(v, flags.endDate, L.DefaultCurrency))
 				}
 				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
 			}
@@ -131,12 +129,12 @@ func runBalance(args []string) error {
 	return nil
 }
 
-func runStats(args []string) error {
-	if len(Ledger.Transactions) == 0 {
+func runStats(L *accounting.Ledger, args []string) error {
+	if len(L.Transactions) == 0 {
 		fmt.Println("No transactions in ledger")
 	} else {
-		first := Ledger.Transactions[0].Time
-		last := Ledger.Transactions[len(Ledger.Transactions)-1].Time
+		first := L.Transactions[0].Time
+		last := L.Transactions[len(L.Transactions)-1].Time
 		firstYear, firstMonth, firstDay := first.Date()
 		lastYear, lastMonth, lastDay := last.Date()
 		end := time.Date(lastYear, lastMonth, lastDay, 0, 0, 0, 0, time.UTC)
@@ -145,27 +143,27 @@ func runStats(args []string) error {
 
 		fmt.Printf("Transaction span : %s to %s (%d days)\n", first.Format("2006-01-02"),
 			last.Format("2006-01-02"), days)
-		fmt.Printf("Transactions     : %d (%.1f per day)\n", len(Ledger.Transactions), float64(len(Ledger.Transactions))/float64(days))
-		fmt.Printf("Accounts         : %d\n", len(Ledger.Accounts))
-		fmt.Printf("Commodities      : %d (", len(Ledger.Currencies))
-		for i, c := range Ledger.Currencies {
+		fmt.Printf("Transactions     : %d (%.1f per day)\n", len(L.Transactions), float64(len(L.Transactions))/float64(days))
+		fmt.Printf("Accounts         : %d\n", len(L.Accounts))
+		fmt.Printf("Commodities      : %d (", len(L.Currencies))
+		for i, c := range L.Currencies {
 			if i > 0 {
 				fmt.Print(" ")
 			}
 			fmt.Print(c.Name)
 		}
 		fmt.Println(")")
-		fmt.Printf("Market prices    : %d\n", len(Ledger.Prices))
+		fmt.Printf("Market prices    : %d\n", len(L.Prices))
 	}
 	return nil
 }
 
-func runPrint(args []string) error {
-	ledger.Export(os.Stdout, Ledger)
+func runPrint(L *accounting.Ledger, args []string) error {
+	ledger.Export(os.Stdout, L)
 	return nil
 }
 
-func runIncomeStatement(args []string) error {
+func runIncomeStatement(L *accounting.Ledger, args []string) error {
 	var incomeAccounts, expenseAccounts []*accounting.Account
 	var incomes, expenses []struct {
 		name    string
@@ -176,7 +174,7 @@ func runIncomeStatement(args []string) error {
 	var balanceLen = 1
 
 	if len(args) == 0 {
-		for _, a := range Ledger.Accounts {
+		for _, a := range L.Accounts {
 			if strings.HasPrefix(a.FullName(), "Income:") {
 				incomeAccounts = append(incomeAccounts, a)
 			}
@@ -185,7 +183,7 @@ func runIncomeStatement(args []string) error {
 			}
 		}
 	} else {
-		for _, a := range Ledger.Accounts {
+		for _, a := range L.Accounts {
 			if !strings.HasPrefix(a.FullName(), "Income") {
 				continue
 			}
@@ -196,7 +194,7 @@ func runIncomeStatement(args []string) error {
 				}
 			}
 		}
-		for _, a := range Ledger.Accounts {
+		for _, a := range L.Accounts {
 			if !strings.HasPrefix(a.FullName(), "Expense") {
 				continue
 			}
@@ -278,12 +276,12 @@ func runIncomeStatement(args []string) error {
 	return nil
 }
 
-func runDelta(args []string) error {
+func runDelta(L *accounting.Ledger, args []string) error {
 	var accounts []*accounting.Account
 	if len(args) == 0 {
 		return nil
 	}
-	for _, a := range Ledger.Accounts {
+	for _, a := range L.Accounts {
 		for _, b := range args {
 			if strings.Contains(strings.ToLower(a.FullName()), strings.ToLower(b)) {
 				accounts = append(accounts, a)
@@ -301,13 +299,13 @@ func runDelta(args []string) error {
 	if flags.market {
 		var bal1, bal2 accounting.Balance
 		for _, v := range balanceBegin {
-			bal1.Add(Ledger.Convert(v, flags.beginDate, Ledger.DefaultCurrency))
+			bal1.Add(L.Convert(v, flags.beginDate, L.DefaultCurrency))
 		}
 		var balanceEnd accounting.Balance
 		balanceEnd.AddBalance(balanceBegin)
 		balanceEnd.AddBalance(balanceDelta)
 		for _, v := range balanceEnd {
-			bal2.Add(Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency))
+			bal2.Add(L.Convert(v, flags.endDate, L.DefaultCurrency))
 		}
 		balanceDelta = bal2
 		balanceDelta.SubBalance(bal1)
@@ -321,14 +319,14 @@ func runDelta(args []string) error {
 	return nil
 }
 
-func runPrice(args []string) error {
+func runPrice(L *accounting.Ledger, args []string) error {
 	for _, p := range args {
 		var v accounting.Value
 		v.Amount = accounting.U
-		v.Currency, _ = Ledger.GetCurrency(p)
-		v2 := Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency)
+		v.Currency, _ = L.GetCurrency(p)
+		v2 := L.Convert(v, flags.endDate, L.DefaultCurrency)
 
-		fmt.Printf("Price for %s: %s\n", p, v2)
+		fmt.Printf("Price for %s: %s\n", p, v2.FullString())
 	}
 	return nil
 }
@@ -367,20 +365,20 @@ func transactionInPivot(t *accounting.Transaction, pivot sliceString) bool {
 	return false
 }
 
-func doPivot(pivot sliceString) {
+func doPivot(L *accounting.Ledger, pivot sliceString) {
 	if len(pivot) == 0 {
 		return
 	}
-	for i := 0; i < len(Ledger.Transactions); i++ {
-		if !transactionInPivot(Ledger.Transactions[i], pivot) {
-			Ledger.Transactions = append(Ledger.Transactions[:i], Ledger.Transactions[i+1:]...)
+	for i := 0; i < len(L.Transactions); i++ {
+		if !transactionInPivot(L.Transactions[i], pivot) {
+			L.Transactions = append(L.Transactions[:i], L.Transactions[i+1:]...)
 			i--
 		}
 	}
-	for i := range Ledger.Accounts {
-		for j := 0; j < len(Ledger.Accounts[i].Splits); j++ {
-			if !transactionInPivot(Ledger.Accounts[i].Splits[j].Transaction, pivot) {
-				Ledger.Accounts[i].Splits = append(Ledger.Accounts[i].Splits[:j], Ledger.Accounts[i].Splits[j+1:]...)
+	for i := range L.Accounts {
+		for j := 0; j < len(L.Accounts[i].Splits); j++ {
+			if !transactionInPivot(L.Accounts[i].Splits[j].Transaction, pivot) {
+				L.Accounts[i].Splits = append(L.Accounts[i].Splits[:j], L.Accounts[i].Splits[j+1:]...)
 				j--
 			}
 		}
@@ -388,6 +386,7 @@ func doPivot(pivot sliceString) {
 }
 
 func main() {
+	var L *accounting.Ledger
 	var err error
 	var filename string
 	var txtBeginDate, txtEndDate, txtPeriod string
@@ -444,18 +443,19 @@ func main() {
 	if len(flag.Args()) > 0 && commands[flag.Args()[0]] == nil {
 		log.Fatalf("ledger %s: unknown command\n", flag.Args()[0])
 	}
-	Ledger, err = accounting.Open(filename)
+	L, err = accounting.Open(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
 		os.Exit(1)
 	}
+	newL := L.Clone()
 	if flags.pivot != nil {
-		doPivot(flags.pivot)
+		doPivot(newL, flags.pivot)
 	}
 	if txtBeginDate != "" {
-		for i := len(Ledger.Transactions) - 1; i >= 0; i-- {
-			if Ledger.Transactions[i].Time.Before(flags.beginDate) {
-				Ledger.Transactions = Ledger.Transactions[i+1:]
+		for i := len(newL.Transactions) - 1; i >= 0; i-- {
+			if newL.Transactions[i].Time.Before(flags.beginDate) {
+				newL.Transactions = newL.Transactions[i+1:]
 				break
 			}
 		}
@@ -465,27 +465,27 @@ func main() {
 		//		break
 		//	}
 		//}
-		for i := range Ledger.Accounts {
-			for j := len(Ledger.Accounts[i].Splits) - 1; j >= 0; j-- {
-				if Ledger.Accounts[i].Splits[j].Time.Before(flags.beginDate) {
-					Ledger.Accounts[i].StartBalance = Ledger.Accounts[i].Splits[j].Balance
-					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[j+1:]
+		for i := range newL.Accounts {
+			for j := len(newL.Accounts[i].Splits) - 1; j >= 0; j-- {
+				if newL.Accounts[i].Splits[j].Time.Before(flags.beginDate) {
+					newL.Accounts[i].StartBalance = newL.Accounts[i].Splits[j].Balance
+					newL.Accounts[i].Splits = newL.Accounts[i].Splits[j+1:]
 					break
 				}
 			}
 		}
 	}
 	if txtEndDate != "" {
-		for i, t := range Ledger.Transactions {
+		for i, t := range newL.Transactions {
 			if t.Time.After(flags.endDate) {
-				Ledger.Transactions = Ledger.Transactions[:i]
+				newL.Transactions = newL.Transactions[:i]
 				break
 			}
 		}
-		for i := range Ledger.Accounts {
-			for j, s := range Ledger.Accounts[i].Splits {
+		for i := range newL.Accounts {
+			for j, s := range newL.Accounts[i].Splits {
 				if s.Time.After(flags.endDate) {
-					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[:j]
+					newL.Accounts[i].Splits = newL.Accounts[i].Splits[:j]
 					break
 				}
 			}
@@ -508,26 +508,26 @@ func main() {
 		}
 	*/
 	if len(flag.Args()) == 0 {
-		tableAccounts()
+		tableAccounts(newL)
 		return
 	}
-	if err = commands[flag.Args()[0]](flag.Args()[1:]); err != nil {
+	if err = commands[flag.Args()[0]](newL, flag.Args()[1:]); err != nil {
 		log.Fatalf("ledger %s: %v\n", flag.Args()[0], err.Error())
 	}
 }
 
-func tableAccounts() {
+func tableAccounts(ledger *accounting.Ledger) {
 	t := tableview.NewTableView()
 	t.FillTable([]string{"account", "balance"}, [][]string{})
 	t.SetExpansion(0, 1)
-	for i, ac := range Ledger.Accounts {
+	for i, ac := range ledger.Accounts {
 		// t.SetCell(i, 0, strconv.Itoa(ac.ID))
 		t.SetCell(i, 0, ac.FullName())
 		t.SetAlign(1, tableview.AlignRight)
-		t.SetCell(i, 1, Ledger.GetBalance(ac, time.Time{}).String())
+		t.SetCell(i, 1, ledger.GetBalance(ac, time.Time{}).String())
 	}
 	t.SetSelectedFunc(func(row int) {
-		tableTransactions(Ledger.Accounts[row-1])
+		tableTransactions(ledger.Accounts[row-1])
 	})
 	t.Run()
 }
