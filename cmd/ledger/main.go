@@ -26,6 +26,7 @@ var commands = map[string]func(args []string) error{
 	"incomestatement": runIncomeStatement,
 	"is":              runIncomeStatement,
 	"delta":           runDelta,
+	"price":           runPrice,
 }
 
 func runAccounts(args []string) error {
@@ -85,7 +86,7 @@ func runBalance(args []string) error {
 		}
 	}
 	for _, a := range accounts {
-		var thisBal accounting.Balance
+		thisBal := a.Account.StartBalance
 		if len(a.Account.Splits) > 0 {
 			if flags.market {
 				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
@@ -94,13 +95,13 @@ func runBalance(args []string) error {
 				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
 			}
 			thisBal = a.Account.Splits[len(a.Account.Splits)-1].Balance
-			for _, v := range thisBal {
-				length := len(v.String())
-				if length > maxLength {
-					maxLength = length
-				}
-				total.Add(v)
+		}
+		for _, v := range thisBal {
+			length := len(v.String())
+			if length > maxLength {
+				maxLength = length
 			}
+			total.Add(v)
 		}
 	}
 	for _, v := range total {
@@ -289,18 +290,46 @@ func runDelta(args []string) error {
 			}
 		}
 	}
-	var balance accounting.Balance
+	var balanceBegin accounting.Balance
+	var balanceDelta accounting.Balance
 	for _, a := range accounts {
+		balanceBegin.AddBalance(a.StartBalance)
 		for _, s := range a.Splits {
-			balance.Add(s.Value)
+			balanceDelta.Add(s.Value)
 		}
+	}
+	if flags.market {
+		var bal1, bal2 accounting.Balance
+		for _, v := range balanceBegin {
+			bal1.Add(Ledger.Convert(v, flags.beginDate, Ledger.DefaultCurrency))
+		}
+		var balanceEnd accounting.Balance
+		balanceEnd.AddBalance(balanceBegin)
+		balanceEnd.AddBalance(balanceDelta)
+		for _, v := range balanceEnd {
+			bal2.Add(Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency))
+		}
+		balanceDelta = bal2
+		balanceDelta.SubBalance(bal1)
 	}
 	if flags.negate {
 		var b2 accounting.Balance
-		b2.SubBalance(balance)
-		balance = b2
+		b2.SubBalance(balanceDelta)
+		balanceDelta = b2
 	}
-	fmt.Println(balance)
+	fmt.Println(balanceDelta)
+	return nil
+}
+
+func runPrice(args []string) error {
+	for _, p := range args {
+		var v accounting.Value
+		v.Amount = accounting.U
+		v.Currency, _ = Ledger.GetCurrency(p)
+		v2 := Ledger.Convert(v, flags.endDate, Ledger.DefaultCurrency)
+
+		fmt.Printf("Price for %s: %s\n", p, v2)
+	}
 	return nil
 }
 
@@ -319,11 +348,12 @@ func (s *sliceString) Set(value string) error {
 }
 
 var flags struct {
-	batch   bool
-	market  bool
-	negate  bool
-	pivot   sliceString
-	endDate time.Time
+	batch     bool
+	market    bool
+	negate    bool
+	pivot     sliceString
+	beginDate time.Time
+	endDate   time.Time
 }
 
 func transactionInPivot(t *accounting.Transaction, pivot sliceString) bool {
@@ -360,12 +390,12 @@ func doPivot(pivot sliceString) {
 func main() {
 	var err error
 	var filename string
-	var txtBeginDate, txtEndDate string
-	var beginDate time.Time
+	var txtBeginDate, txtEndDate, txtPeriod string
 	flags.endDate = time.Now()
 	flag.StringVar(&filename, "f", "", "journal file")
 	flag.StringVar(&txtBeginDate, "b", "", "begin date")
 	flag.StringVar(&txtEndDate, "e", "", "end date")
+	flag.StringVar(&txtPeriod, "p", "", "period")
 	flag.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
 	flag.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
 	flag.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
@@ -379,23 +409,36 @@ func main() {
 		os.Exit(1)
 	}
 	if txtBeginDate != "" {
-		if len(txtBeginDate) == 10 {
-			txtBeginDate = txtBeginDate + "/00:00:00"
+		if len(txtBeginDate) == 4 {
+			txtBeginDate += "-01-01/00:00:00"
+		} else if len(txtBeginDate) == 7 {
+			txtBeginDate += "-01/00:00:00"
+		} else if len(txtBeginDate) == 10 {
+			txtBeginDate += "/00:00:00"
 		}
-		beginDate, err = ledger.GetDate(txtBeginDate)
+		flags.beginDate, err = ledger.GetDate(txtBeginDate)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ledger: %s\n", err.Error())
 			os.Exit(1)
 		}
 	}
 	if txtEndDate != "" {
-		if len(txtEndDate) == 10 {
+		var endOfMonth bool
+		if len(txtEndDate) == 4 {
+			txtEndDate += "-12-31/23:59:59"
+		} else if len(txtEndDate) == 7 {
+			txtEndDate += "-01/23:59:59"
+			endOfMonth = true
+		} else if len(txtEndDate) == 10 {
 			txtEndDate = txtEndDate + "/23:59:59"
 		}
 		flags.endDate, err = ledger.GetDate(txtEndDate)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ledger: %s\n", err.Error())
 			os.Exit(1)
+		}
+		if endOfMonth {
+			flags.endDate = flags.endDate.AddDate(0, 1, -1)
 		}
 	}
 	if len(flag.Args()) > 0 && commands[flag.Args()[0]] == nil {
@@ -411,7 +454,7 @@ func main() {
 	}
 	if txtBeginDate != "" {
 		for i := len(Ledger.Transactions) - 1; i >= 0; i-- {
-			if Ledger.Transactions[i].Time.Before(beginDate) {
+			if Ledger.Transactions[i].Time.Before(flags.beginDate) {
 				Ledger.Transactions = Ledger.Transactions[i+1:]
 				break
 			}
@@ -424,7 +467,8 @@ func main() {
 		//}
 		for i := range Ledger.Accounts {
 			for j := len(Ledger.Accounts[i].Splits) - 1; j >= 0; j-- {
-				if Ledger.Accounts[i].Splits[j].Time.Before(beginDate) {
+				if Ledger.Accounts[i].Splits[j].Time.Before(flags.beginDate) {
+					Ledger.Accounts[i].StartBalance = Ledger.Accounts[i].Splits[j].Balance
 					Ledger.Accounts[i].Splits = Ledger.Accounts[i].Splits[j+1:]
 					break
 				}
@@ -447,20 +491,22 @@ func main() {
 			}
 		}
 	}
-	for i := len(Ledger.Accounts) - 1; i >= 0; i-- {
-		a := Ledger.Accounts[i]
-		if len(a.Children) == 0 && len(a.Splits) == 0 {
-			Ledger.Accounts = append(Ledger.Accounts[:i], Ledger.Accounts[i+1:]...)
-			if a.Parent != nil {
-				for j := 0; j < len(a.Parent.Children); j++ {
-					if a.Parent.Children[j] == a {
-						a.Parent.Children = append(a.Parent.Children[:j], a.Parent.Children[j+1:]...)
-						break
+	/*
+		for i := len(Ledger.Accounts) - 1; i >= 0; i-- {
+			a := Ledger.Accounts[i]
+			if len(a.Children) == 0 && len(a.Splits) == 0 {
+				Ledger.Accounts = append(Ledger.Accounts[:i], Ledger.Accounts[i+1:]...)
+				if a.Parent != nil {
+					for j := 0; j < len(a.Parent.Children); j++ {
+						if a.Parent.Children[j] == a {
+							a.Parent.Children = append(a.Parent.Children[:j], a.Parent.Children[j+1:]...)
+							break
+						}
 					}
 				}
 			}
 		}
-	}
+	*/
 	if len(flag.Args()) == 0 {
 		tableAccounts()
 		return

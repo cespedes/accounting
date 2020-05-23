@@ -165,6 +165,123 @@ func (l *Ledger) Refresh() {
 	l.connection.Refresh()
 }
 
+// Clone returns a deep copy of l.
+func (l *Ledger) Clone() *Ledger {
+	mapAccounts := make(map[*Account]*Account)
+	mapTransactions := make(map[*Transaction]*Transaction)
+	mapSplits := make(map[*Split]*Split)
+	mapCurrencies := make(map[*Currency]*Currency)
+	mapPrices := make(map[*Price]*Price)
+
+	for _, a := range l.Accounts {
+		mapAccounts[a] = new(Account)
+	}
+	for _, t := range l.Transactions {
+		mapTransactions[t] = new(Transaction)
+		for _, s := range t.Splits {
+			mapSplits[s] = new(Split)
+		}
+	}
+	for _, c := range l.Currencies {
+		mapCurrencies[c] = new(Currency)
+	}
+	for _, p := range l.Prices {
+		mapPrices[p] = new(Price)
+	}
+
+	res := new(Ledger)
+	res.connection = l.connection
+	res.Accounts = make([]*Account, len(l.Accounts))
+	for i, a := range l.Accounts {
+		na := mapAccounts[a]
+		res.Accounts[i] = na
+		na.ID = a.ID
+		na.Parent = mapAccounts[a.Parent]
+		na.Children = make([]*Account, len(a.Children))
+		for i := range a.Children {
+			na.Children[i] = mapAccounts[a.Children[i]]
+		}
+		na.Level = a.Level
+		na.Name = a.Name
+		na.Code = a.Code
+		for i := range a.Splits {
+			na.Splits[i] = mapSplits[a.Splits[i]]
+		}
+		na.StartBalance = make([]Value, len(a.StartBalance))
+		for k, v := range a.StartBalance {
+			na.StartBalance[k].Amount = v.Amount
+			na.StartBalance[k].Currency = mapCurrencies[v.Currency]
+		}
+	}
+	res.Transactions = make([]*Transaction, len(l.Transactions))
+	for i, t := range l.Transactions {
+		nt := mapTransactions[t]
+		res.Transactions[i] = nt
+		nt.ID = t.ID
+		nt.Time = t.Time
+		nt.Description = t.Description
+		for j, s := range t.Splits {
+			ns := mapSplits[s]
+			nt.Splits[j] = ns
+			ns.ID = s.ID
+			ns.Account = mapAccounts[s.Account]
+			ns.Transaction = mapTransactions[s.Transaction]
+			switch ns.Time {
+			case &s.Transaction.Time:
+				ns.Time = &ns.Transaction.Time
+			case nil:
+				ns.Time = nil
+			default:
+				ns.Time = new(time.Time)
+				*ns.Time = *s.Time
+			}
+			ns.Value.Amount = s.Value.Amount
+			ns.Value.Currency = mapCurrencies[s.Value.Currency]
+			ns.Balance = make([]Value, len(s.Balance))
+			for k, v := range s.Balance {
+				ns.Balance[k].Amount = v.Amount
+				ns.Balance[k].Currency = mapCurrencies[v.Currency]
+			}
+		}
+	}
+	for i, c := range l.Currencies {
+		nc := mapCurrencies[c]
+		res.Currencies[i] = nc
+		nc.ID = c.ID
+		nc.Name = c.Name
+		nc.PrintBefore = c.PrintBefore
+		nc.WithoutSpace = c.WithoutSpace
+		nc.Thousand = c.Thousand
+		nc.Decimal = c.Decimal
+		nc.Precision = c.Precision
+		nc.ISIN = c.ISIN
+	}
+	for i, p := range l.Prices {
+		np := mapPrices[p]
+		res.Prices[i] = np
+		np.ID = p.ID
+		np.Time = p.Time
+		np.Currency = mapCurrencies[p.Currency]
+		np.Value.Amount = p.Value.Amount
+		np.Value.Currency = mapCurrencies[p.Value.Currency]
+	}
+	res.Comments = make(map[interface{}][]string)
+	// TODO: Comments are not deep-copied (I have to deal with interface{})
+	res.Assertions = make(map[*Split]Value)
+	for s, v := range l.Assertions {
+		v.Currency = mapCurrencies[v.Currency]
+		res.Assertions[mapSplits[s]] = v
+	}
+	res.SplitPrices = make(map[*Split]Value)
+	for s, v := range l.SplitPrices {
+		v.Currency = mapCurrencies[v.Currency]
+		res.SplitPrices[mapSplits[s]] = v
+	}
+	res.DefaultCurrency = mapCurrencies[l.DefaultCurrency]
+
+	return res
+}
+
 // Account returns details for one account, given its ID.
 func (l *Ledger) Account(id ID) *Account {
 	x, ok := l.connection.(interface {
