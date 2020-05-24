@@ -14,7 +14,7 @@ import (
 )
 
 type flags struct {
-	batch     bool
+	total     bool
 	market    bool
 	negate    bool
 	pivot     sliceString
@@ -117,21 +117,23 @@ func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 			maxLength = length
 		}
 	}
-	for _, a := range accounts {
-		if len(a.Account.Splits) > 0 {
-			for i, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
-				fmt.Printf("%*.*s", maxLength, maxLength, v.String())
-				if i == len(a.Account.Splits[len(a.Account.Splits)-1].Balance)-1 {
-					fmt.Printf(" %*.0s%s\n", 2*a.Level, " ", a.Name)
-				} else {
-					fmt.Println()
+	if !flags.total {
+		for _, a := range accounts {
+			if len(a.Account.Splits) > 0 {
+				for i, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
+					fmt.Printf("%*.*s", maxLength, maxLength, v.String())
+					if i == len(a.Account.Splits[len(a.Account.Splits)-1].Balance)-1 {
+						fmt.Printf(" %*.0s%s\n", 2*a.Level, " ", a.Name)
+					} else {
+						fmt.Println()
+					}
 				}
+			} else {
+				fmt.Printf("%*.0s%s\n", maxLength+1+2*a.Level, " ", a.Name)
 			}
-		} else {
-			fmt.Printf("%*.0s%s\n", maxLength+1+2*a.Level, " ", a.Name)
 		}
+		fmt.Println(strings.Repeat("-", maxLength))
 	}
-	fmt.Println(strings.Repeat("-", maxLength))
 	for _, v := range total {
 		fmt.Printf("%*.*s\n", maxLength, maxLength, v.String())
 	}
@@ -258,7 +260,7 @@ func runIncomeStatement(L *accounting.Ledger, flags flags, args []string) error 
 			balanceLen = len(i.balance)
 		}
 	}
-	if flags.batch {
+	if flags.total {
 		fmt.Println(net)
 		return nil
 	}
@@ -406,7 +408,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
 		os.Exit(1)
 	}
-	main2(L.Clone(), os.Args)
+	begin := 0
+	for i := range os.Args {
+		if os.Args[i] == "--" {
+			if begin != i {
+				main2(L.Clone(), os.Args[begin:i])
+			}
+			begin = i + 1
+		}
+	}
+	if begin == 0 || begin < len(os.Args) {
+		main2(L.Clone(), os.Args[begin:])
+	}
 }
 
 func main2(L *accounting.Ledger, args []string) {
@@ -421,7 +434,7 @@ func main2(L *accounting.Ledger, args []string) {
 	f.StringVar(&txtPeriod, "p", "", "period")
 	f.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
 	f.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
-	f.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
+	f.BoolVar(&flags.total, "total", false, "show only total amounts")
 	f.BoolVar(&flags.negate, "negate", false, "change values from negative to positive (and vice versa)")
 	f.Parse(args)
 	if txtBeginDate != "" {
