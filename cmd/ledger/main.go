@@ -13,7 +13,16 @@ import (
 	"github.com/cespedes/tableview"
 )
 
-var commands = map[string]func(ledger *accounting.Ledger, args []string) error{
+type flags struct {
+	batch     bool
+	market    bool
+	negate    bool
+	pivot     sliceString
+	beginDate time.Time
+	endDate   time.Time
+}
+
+var commands = map[string]func(ledger *accounting.Ledger, flags flags, args []string) error{
 	"accounts":        runAccounts,
 	"a":               runAccounts,
 	"balance":         runBalance,
@@ -27,7 +36,7 @@ var commands = map[string]func(ledger *accounting.Ledger, args []string) error{
 	"price":           runPrice,
 }
 
-func runAccounts(L *accounting.Ledger, args []string) error {
+func runAccounts(L *accounting.Ledger, flags flags, args []string) error {
 	var treeFlag bool
 	f := flag.NewFlagSet("accounts", flag.ExitOnError)
 	f.BoolVar(&treeFlag, "tree", false, "show short account names, as a tree")
@@ -65,7 +74,7 @@ func insertAccount(where *[]account, name string, level int, a *accounting.Accou
 	}
 }
 
-func runBalance(L *accounting.Ledger, args []string) error {
+func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 	var maxLength int
 	var total accounting.Balance
 	var accounts []account
@@ -129,7 +138,7 @@ func runBalance(L *accounting.Ledger, args []string) error {
 	return nil
 }
 
-func runStats(L *accounting.Ledger, args []string) error {
+func runStats(L *accounting.Ledger, flags flags, args []string) error {
 	if len(L.Transactions) == 0 {
 		fmt.Println("No transactions in ledger")
 	} else {
@@ -158,12 +167,12 @@ func runStats(L *accounting.Ledger, args []string) error {
 	return nil
 }
 
-func runPrint(L *accounting.Ledger, args []string) error {
+func runPrint(L *accounting.Ledger, flags flags, args []string) error {
 	ledger.Export(os.Stdout, L)
 	return nil
 }
 
-func runIncomeStatement(L *accounting.Ledger, args []string) error {
+func runIncomeStatement(L *accounting.Ledger, flags flags, args []string) error {
 	var incomeAccounts, expenseAccounts []*accounting.Account
 	var incomes, expenses []struct {
 		name    string
@@ -276,7 +285,7 @@ func runIncomeStatement(L *accounting.Ledger, args []string) error {
 	return nil
 }
 
-func runDelta(L *accounting.Ledger, args []string) error {
+func runDelta(L *accounting.Ledger, flags flags, args []string) error {
 	var accounts []*accounting.Account
 	if len(args) == 0 {
 		return nil
@@ -319,7 +328,7 @@ func runDelta(L *accounting.Ledger, args []string) error {
 	return nil
 }
 
-func runPrice(L *accounting.Ledger, args []string) error {
+func runPrice(L *accounting.Ledger, flags flags, args []string) error {
 	for _, p := range args {
 		var v accounting.Value
 		v.Amount = accounting.U
@@ -343,15 +352,6 @@ func (s *sliceString) String() string {
 func (s *sliceString) Set(value string) error {
 	*s = append(*s, value)
 	return nil
-}
-
-var flags struct {
-	batch     bool
-	market    bool
-	negate    bool
-	pivot     sliceString
-	beginDate time.Time
-	endDate   time.Time
 }
 
 func transactionInPivot(t *accounting.Transaction, pivot sliceString) bool {
@@ -389,24 +389,41 @@ func main() {
 	var L *accounting.Ledger
 	var err error
 	var filename string
-	var txtBeginDate, txtEndDate, txtPeriod string
-	flags.endDate = time.Now()
-	flag.StringVar(&filename, "f", "", "journal file")
-	flag.StringVar(&txtBeginDate, "b", "", "begin date")
-	flag.StringVar(&txtEndDate, "e", "", "end date")
-	flag.StringVar(&txtPeriod, "p", "", "period")
-	flag.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
-	flag.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
-	flag.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
-	flag.BoolVar(&flags.negate, "negate", false, "change values from negative to positive (and vice versa)")
-	flag.Parse()
-	if filename == "" {
+	os.Args = os.Args[1:]
+	if len(os.Args) >= 2 && os.Args[0] == "-f" {
+		filename = os.Args[1]
+		os.Args = os.Args[2:]
+	} else {
 		filename = os.Getenv("LEDGER_FILE")
 	}
 	if filename == "" {
-		fmt.Fprintln(os.Stderr, "ledger: no journal file specified.  Please use option -f")
+		fmt.Fprintln(os.Stderr, "ledger: no journal file specified.")
+		fmt.Fprintln(os.Stderr, "Please use option -f or environment variable LEDGER_FILE")
 		os.Exit(1)
 	}
+	L, err = accounting.Open(filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
+		os.Exit(1)
+	}
+	main2(L.Clone(), os.Args)
+}
+
+func main2(L *accounting.Ledger, args []string) {
+	var flags flags
+	var err error
+	var txtBeginDate, txtEndDate, txtPeriod string
+	flags.endDate = time.Now()
+	f := flag.NewFlagSet("ledger", flag.ExitOnError)
+
+	f.StringVar(&txtBeginDate, "b", "", "begin date")
+	f.StringVar(&txtEndDate, "e", "", "end date")
+	f.StringVar(&txtPeriod, "p", "", "period")
+	f.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
+	f.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
+	f.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
+	f.BoolVar(&flags.negate, "negate", false, "change values from negative to positive (and vice versa)")
+	f.Parse(args)
 	if txtBeginDate != "" {
 		if len(txtBeginDate) == 4 {
 			txtBeginDate += "-01-01/00:00:00"
@@ -440,22 +457,13 @@ func main() {
 			flags.endDate = flags.endDate.AddDate(0, 1, -1)
 		}
 	}
-	if len(flag.Args()) > 0 && commands[flag.Args()[0]] == nil {
-		log.Fatalf("ledger %s: unknown command\n", flag.Args()[0])
-	}
-	L, err = accounting.Open(filename)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", filename, err.Error())
-		os.Exit(1)
-	}
-	newL := L.Clone()
 	if flags.pivot != nil {
-		doPivot(newL, flags.pivot)
+		doPivot(L, flags.pivot)
 	}
 	if txtBeginDate != "" {
-		for i := len(newL.Transactions) - 1; i >= 0; i-- {
-			if newL.Transactions[i].Time.Before(flags.beginDate) {
-				newL.Transactions = newL.Transactions[i+1:]
+		for i := len(L.Transactions) - 1; i >= 0; i-- {
+			if L.Transactions[i].Time.Before(flags.beginDate) {
+				L.Transactions = L.Transactions[i+1:]
 				break
 			}
 		}
@@ -465,27 +473,27 @@ func main() {
 		//		break
 		//	}
 		//}
-		for i := range newL.Accounts {
-			for j := len(newL.Accounts[i].Splits) - 1; j >= 0; j-- {
-				if newL.Accounts[i].Splits[j].Time.Before(flags.beginDate) {
-					newL.Accounts[i].StartBalance = newL.Accounts[i].Splits[j].Balance
-					newL.Accounts[i].Splits = newL.Accounts[i].Splits[j+1:]
+		for i := range L.Accounts {
+			for j := len(L.Accounts[i].Splits) - 1; j >= 0; j-- {
+				if L.Accounts[i].Splits[j].Time.Before(flags.beginDate) {
+					L.Accounts[i].StartBalance = L.Accounts[i].Splits[j].Balance
+					L.Accounts[i].Splits = L.Accounts[i].Splits[j+1:]
 					break
 				}
 			}
 		}
 	}
 	if txtEndDate != "" {
-		for i, t := range newL.Transactions {
+		for i, t := range L.Transactions {
 			if t.Time.After(flags.endDate) {
-				newL.Transactions = newL.Transactions[:i]
+				L.Transactions = L.Transactions[:i]
 				break
 			}
 		}
-		for i := range newL.Accounts {
-			for j, s := range newL.Accounts[i].Splits {
+		for i := range L.Accounts {
+			for j, s := range L.Accounts[i].Splits {
 				if s.Time.After(flags.endDate) {
-					newL.Accounts[i].Splits = newL.Accounts[i].Splits[:j]
+					L.Accounts[i].Splits = L.Accounts[i].Splits[:j]
 					break
 				}
 			}
@@ -507,12 +515,15 @@ func main() {
 			}
 		}
 	*/
-	if len(flag.Args()) == 0 {
-		tableAccounts(newL)
+	if len(f.Args()) == 0 {
+		tableAccounts(L)
 		return
 	}
-	if err = commands[flag.Args()[0]](newL, flag.Args()[1:]); err != nil {
-		log.Fatalf("ledger %s: %v\n", flag.Args()[0], err.Error())
+	if len(f.Args()) > 0 && commands[f.Args()[0]] == nil {
+		log.Fatalf("ledger %s: unknown command\n", f.Args()[0])
+	}
+	if err = commands[f.Args()[0]](L, flags, f.Args()[1:]); err != nil {
+		log.Fatalf("ledger %s: %v\n", f.Args()[0], err.Error())
 	}
 }
 
