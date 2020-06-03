@@ -14,9 +14,11 @@ import (
 )
 
 type flags struct {
-	total     bool
-	market    bool
-	negate    bool
+	total     bool // Show only total amounts
+	market    bool // Show market prices (all prices converted to default currency)
+	negate    bool // Display negate results in delta
+	batch     bool // Show computer-ready results
+	debug     bool
 	pivot     sliceString
 	beginDate time.Time
 	endDate   time.Time
@@ -97,7 +99,11 @@ func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 		if len(a.Account.Splits) > 0 {
 			if flags.market {
 				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
-					thisBal.Add(L.Convert(v, flags.endDate, L.DefaultCurrency))
+					nv, err := L.Convert(v, flags.endDate, L.DefaultCurrency)
+					if err != nil {
+						return err
+					}
+					thisBal.Add(nv)
 				}
 				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
 			}
@@ -133,6 +139,9 @@ func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 			}
 		}
 		fmt.Println(strings.Repeat("-", maxLength))
+	}
+	if len(total) == 0 {
+		fmt.Println("0")
 	}
 	for _, v := range total {
 		fmt.Printf("%*.*s\n", maxLength, maxLength, v.String())
@@ -310,13 +319,21 @@ func runDelta(L *accounting.Ledger, flags flags, args []string) error {
 	if flags.market {
 		var bal1, bal2 accounting.Balance
 		for _, v := range balanceBegin {
-			bal1.Add(L.Convert(v, flags.beginDate, L.DefaultCurrency))
+			nv, err := L.Convert(v, flags.beginDate, L.DefaultCurrency)
+			if err != nil {
+				return err
+			}
+			bal1.Add(nv)
 		}
 		var balanceEnd accounting.Balance
 		balanceEnd.AddBalance(balanceBegin)
 		balanceEnd.AddBalance(balanceDelta)
 		for _, v := range balanceEnd {
-			bal2.Add(L.Convert(v, flags.endDate, L.DefaultCurrency))
+			nv, err := L.Convert(v, flags.beginDate, L.DefaultCurrency)
+			if err != nil {
+				return err
+			}
+			bal2.Add(nv)
 		}
 		balanceDelta = bal2
 		balanceDelta.SubBalance(bal1)
@@ -335,9 +352,15 @@ func runPrice(L *accounting.Ledger, flags flags, args []string) error {
 		var v accounting.Value
 		v.Amount = accounting.U
 		v.Currency, _ = L.GetCurrency(p)
-		v2 := L.Convert(v, flags.endDate, L.DefaultCurrency)
-
-		fmt.Printf("Price for %s: %s\n", p, v2.FullString())
+		v2, err := L.Convert(v, flags.endDate, L.DefaultCurrency)
+		if err != nil {
+			return err
+		}
+		if flags.batch {
+			fmt.Printf("%s\n", v2.FullString())
+		} else {
+			fmt.Printf("Price for %s: %s\n", p, v2.FullString())
+		}
 	}
 	return nil
 }
@@ -433,6 +456,7 @@ func main2(L *accounting.Ledger, args []string) {
 	f.StringVar(&txtEndDate, "e", "", "end date")
 	f.StringVar(&txtPeriod, "p", "", "period")
 	f.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
+	f.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
 	f.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
 	f.BoolVar(&flags.total, "total", false, "show only total amounts")
 	f.BoolVar(&flags.negate, "negate", false, "change values from negative to positive (and vice versa)")

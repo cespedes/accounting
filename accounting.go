@@ -515,10 +515,10 @@ func insertAccount(where *[]*Account, account *Account) {
 }
 
 // Convert returns a value to another currency.
-func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
+func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) (Value, error) {
 	if v.Currency == currency {
 		//fmt.Printf("Convert(%s,%s,%s) = %s (1)\n", v, when.Format("2006-01-02"), currency.Name, v)
-		return v
+		return v, nil
 	}
 	var prevTime, nextTime time.Time
 	var prevValue, nextValue Value
@@ -530,7 +530,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		if p.Time == when {
 			p.Value.Mul(v)
 			//fmt.Printf("Convert(%s,%s,%s) = %s (2)\n", v, when.Format("2006-01-02"), currency.Name, p.Value)
-			return p.Value
+			return p.Value, nil
 		}
 		if p.Time.Before(when) {
 			prevTime = p.Time
@@ -541,7 +541,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		nextValue = p.Value
 		break
 	}
-	if prevTime == (time.Time{}) && nextTime == (time.Time{}) {
+	if prevTime == (time.Time{}) && nextTime == (time.Time{}) { // no price match
 		for _, p := range l.Prices {
 			if p.Currency != v.Currency {
 				continue
@@ -551,7 +551,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 				prevValue = p.Value
 				continue
 			}
-			if p.Time.Sub(when) < when.Sub(prevTime) {
+			if prevTime == (time.Time{}) || p.Time.Sub(when) < when.Sub(prevTime) {
 				prevTime = p.Time
 				prevValue = p.Value
 			}
@@ -559,19 +559,23 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 		}
 		if prevTime == (time.Time{}) {
 			//fmt.Printf("Convert(%s,%s,%s) = %s (3)\n", v, when.Format("2006-01-02"), currency.Name, v)
-			return v
+			return v, fmt.Errorf("could not convert %q to %q", v, currency.Name)
 		}
-		return l.Convert(l.Convert(v, when, prevValue.Currency), when, currency)
+		nv, err := l.Convert(v, when, prevValue.Currency)
+		if err != nil {
+			return nv, err
+		}
+		return l.Convert(nv, when, currency)
 	}
 	if nextTime == (time.Time{}) {
 		prevValue.Mul(v)
 		//fmt.Printf("Convert(%s,%s,%s) = %s (4)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
-		return prevValue
+		return prevValue, nil
 	}
 	if prevTime == (time.Time{}) {
 		nextValue.Mul(v)
 		//fmt.Printf("Convert(%s,%s,%s) = %s (5)\n", v, when.Format("2006-01-02"), currency.Name, nextValue)
-		return nextValue
+		return nextValue, nil
 	}
 	d1 := when.Sub(prevTime)
 	d2 := nextTime.Sub(prevTime)
@@ -582,7 +586,7 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) Value {
 	prevValue.Amount = i.Int64()
 	prevValue.Mul(v)
 	//fmt.Printf("Convert(%s,%s,%s) = %s (6)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
-	return prevValue
+	return prevValue, nil
 }
 
 // Fill re-calculates all the automatic fields in all the accounting data.
