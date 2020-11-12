@@ -42,7 +42,7 @@ type Currency struct {
 
 // Value specifies an amount and its currency
 type Value struct {
-	Amount   int64     // Amount (actual value times 10^8)
+	Amount   int64     // Amount (actual value times U)
 	Currency *Currency // Currency or commodity
 }
 
