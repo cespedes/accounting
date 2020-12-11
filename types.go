@@ -62,7 +62,7 @@ type Account struct {
 }
 
 var transferAccount Account = Account{
-	Name: "Transfer account",
+	Name: "Assets:Transfer account",
 }
 
 // Transaction stores an entry in the journal, consisting in a timestamp,

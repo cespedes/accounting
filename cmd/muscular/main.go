@@ -102,7 +102,7 @@ func main2(L *accounting.Ledger, args []string) {
 	f.BoolVar(&flags.debug, "debug", false, "show debugging information")
 	f.Float64Var(&flags.divide, "divide", 1.0, "how to divide amount amoung commodities")
 	f.BoolVar(&flags.simulate, "simulate", false, "run a simulation")
-	f.IntVar(&flags.numCommodities, "num", 3, "number of commodities")
+	f.IntVar(&flags.numCommodities, "num", 3, "number of commodities where to invest")
 	f.IntVar(&flags.numMeasures, "measures", 1, "number of measures")
 	f.Parse(args)
 	// flags.period*:
