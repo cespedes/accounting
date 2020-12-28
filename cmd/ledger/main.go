@@ -20,6 +20,7 @@ type flags struct {
 	batch     bool // Show computer-ready results
 	debug     bool
 	pivot     sliceString
+	currency  sliceString
 	beginDate time.Time
 	endDate   time.Time
 }
@@ -58,6 +59,7 @@ type account struct {
 	Name    string
 	Level   int
 	Account *accounting.Account
+	Balance accounting.Balance
 }
 
 func insertAccount(where *[]account, name string, level int, a *accounting.Account) {
@@ -94,22 +96,34 @@ func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 			}
 		}
 	}
-	for _, a := range accounts {
-		thisBal := a.Account.StartBalance
+	for i, a := range accounts {
+		accounts[i].Balance = a.Account.StartBalance
 		if len(a.Account.Splits) > 0 {
-			if flags.market {
-				for _, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
-					nv, err := L.Convert(v, flags.endDate, L.DefaultCurrency)
-					if err != nil {
-						return err
-					}
-					thisBal.Add(nv)
-				}
-				a.Account.Splits[len(a.Account.Splits)-1].Balance = thisBal
-			}
-			thisBal = a.Account.Splits[len(a.Account.Splits)-1].Balance
+			accounts[i].Balance = a.Account.Splits[len(a.Account.Splits)-1].Balance
 		}
-		for _, v := range thisBal {
+		if len(flags.currency) > 0 {
+			var bal accounting.Balance
+			for _, v := range accounts[i].Balance {
+				for _, c := range flags.currency {
+					if v.Currency.Name == c {
+						bal.Add(v)
+					}
+				}
+			}
+			accounts[i].Balance = bal
+		}
+		if flags.market {
+			var bal accounting.Balance
+			for _, v := range accounts[i].Balance {
+				nv, err := L.Convert(v, flags.endDate, L.DefaultCurrency)
+				if err != nil {
+					return err
+				}
+				bal.Add(nv)
+			}
+			accounts[i].Balance = bal
+		}
+		for _, v := range accounts[i].Balance {
 			length := len(v.String())
 			if length > maxLength {
 				maxLength = length
@@ -126,9 +140,9 @@ func runBalance(L *accounting.Ledger, flags flags, args []string) error {
 	if !flags.total {
 		for _, a := range accounts {
 			if len(a.Account.Splits) > 0 {
-				for i, v := range a.Account.Splits[len(a.Account.Splits)-1].Balance {
+				for i, v := range a.Balance {
 					fmt.Printf("%*.*s", maxLength, maxLength, v.String())
-					if i == len(a.Account.Splits[len(a.Account.Splits)-1].Balance)-1 {
+					if i == len(a.Balance)-1 {
 						fmt.Printf(" %*.0s%s\n", 2*a.Level, " ", a.Name)
 					} else {
 						fmt.Println()
@@ -455,7 +469,8 @@ func main2(L *accounting.Ledger, args []string) {
 	f.StringVar(&txtBeginDate, "b", "", "begin date")
 	f.StringVar(&txtEndDate, "e", "", "end date")
 	f.StringVar(&txtPeriod, "p", "", "period")
-	f.Var(&flags.pivot, "pivot", "restrict transactions to those satisfying this pivot")
+	f.Var(&flags.pivot, "pivot", "restrict transactions to those involving accounts with this partial name")
+	f.Var(&flags.currency, "currency", "restrict balance to those in this currency")
 	f.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
 	f.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
 	f.BoolVar(&flags.total, "total", false, "show only total amounts")
