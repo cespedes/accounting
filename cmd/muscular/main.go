@@ -224,7 +224,7 @@ func main2(L *accounting.Ledger, args []string) {
 			mom2[i] += float64(momentum[i][0].Amount) / float64(momentum[i][j+1].Amount)
 		}
 		mom2[i] /= float64(flags.numMeasures)
-		mom2[i] -= 1
+		mom2[i]--
 	}
 	if flags.debug {
 		fmt.Printf("momentum: %+v\n", momentum)

@@ -617,7 +617,7 @@ func (l *Ledger) Fill() error {
 				break
 			}
 			l.Transactions[i].Splits[j].Balance = nil
-			if l.Transactions[i].Splits[j].Account == &transferAccount {
+			if l.Transactions[i].Splits[j].Account == &TransferAccount {
 				l.Transactions[i].Splits[j] = l.Transactions[i].Splits[len(l.Transactions[i].Splits)-1]
 				l.Transactions[i].Splits = l.Transactions[i].Splits[:len(l.Transactions[i].Splits)-1]
 			}
@@ -805,17 +805,17 @@ func (l *Ledger) Fill() error {
 
 	// Create fake splits in transactions with different times.
 	for i := range l.Accounts {
-		if l.Accounts[i] == &transferAccount {
+		if l.Accounts[i] == &TransferAccount {
 			goto transferAlreadyInAccounts
 		}
 	}
-	l.Accounts = append(l.Accounts, &transferAccount)
+	l.Accounts = append(l.Accounts, &TransferAccount)
 transferAlreadyInAccounts:
 	for i := range l.Transactions {
 		for j := range l.Transactions[i].Splits {
 			if l.Transactions[i].Splits[j].Time != &l.Transactions[i].Time {
 				split1 := &Split{
-					Account:     &transferAccount,
+					Account:     &TransferAccount,
 					Transaction: l.Transactions[i],
 					Time:        l.Transactions[i].Splits[j].Time,
 					Value: Value{
@@ -824,7 +824,7 @@ transferAlreadyInAccounts:
 					},
 				}
 				split2 := &Split{
-					Account:     &transferAccount,
+					Account:     &TransferAccount,
 					Transaction: l.Transactions[i],
 					Time:        &l.Transactions[i].Time,
 					Value: Value{
@@ -834,17 +834,17 @@ transferAlreadyInAccounts:
 				}
 				l.Transactions[i].Splits = append(l.Transactions[i].Splits, split1)
 				l.Transactions[i].Splits = append(l.Transactions[i].Splits, split2)
-				transferAccount.Splits = append(transferAccount.Splits, split1)
-				transferAccount.Splits = append(transferAccount.Splits, split2)
+				TransferAccount.Splits = append(TransferAccount.Splits, split1)
+				TransferAccount.Splits = append(TransferAccount.Splits, split2)
 			}
 		}
 	}
-	sort.SliceStable(transferAccount.Splits, func(i, j int) bool {
-		return transferAccount.Splits[i].Time.Before(*transferAccount.Splits[j].Time)
+	sort.SliceStable(TransferAccount.Splits, func(i, j int) bool {
+		return TransferAccount.Splits[i].Time.Before(*TransferAccount.Splits[j].Time)
 	})
 
 	var b Balance
-	for _, s := range transferAccount.Splits {
+	for _, s := range TransferAccount.Splits {
 		b.Add(s.Value)
 		s.Balance = b.Dup()
 	}

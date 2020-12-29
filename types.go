@@ -20,7 +20,7 @@ type Ledger struct {
 	// TagsByName      map[string][]struct {Value string; Place interface{}}
 }
 
-// ID is used to identify one currency, account, transaction or price.
+// ID is used to identify one currency, account, transaction, split or price.
 type ID interface {
 	String() string
 }
@@ -61,7 +61,9 @@ type Account struct {
 	StartBalance Balance    // Balance at the start of current period (zero if no start date was specified)
 }
 
-var transferAccount Account = Account{
+// TransferAccount is a special account used when a transaction has two or more splits with different times.
+// Ledger.Fill() automatically generates splits with this account.
+var TransferAccount Account = Account{
 	Name: "Assets:Transfer account",
 }
 
