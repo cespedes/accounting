@@ -65,14 +65,17 @@ func Register(name string, driver Driver) {
 	drivers[name] = driver
 }
 
-func (value Value) getString(full bool) string {
+// getString returns a string with the correct
+// representation of that value, with or without its currency (units flag),
+// using just the defaults digits for the currency, or all the non-zero ones (full flag).
+func (value Value) GetString(full bool, units bool) string {
 	var result string
 	var c Currency
 
 	if value.Currency != nil {
 		c = *value.Currency
 	}
-	if c.PrintBefore {
+	if units && c.PrintBefore {
 		result += c.Name
 		if !c.WithoutSpace {
 			result += " "
@@ -116,7 +119,7 @@ func (value Value) getString(full bool) string {
 		}
 		result += digits[:precision]
 	}
-	if !c.PrintBefore {
+	if units && !c.PrintBefore {
 		if !c.WithoutSpace && c.Name != "" {
 			result += " "
 		}
@@ -130,14 +133,14 @@ func (value Value) getString(full bool) string {
 // representation of that value, including its currency.
 // The amount is represented with just the default digits in the currency definition.
 func (value Value) String() string {
-	return value.getString(false)
+	return value.GetString(false, true)
 }
 
 // FullString returns a string with the correct
 // representation of that value, including its currency.
 // The amount is represented with all the relevant digits.
 func (value Value) FullString() string {
-	return value.getString(true)
+	return value.GetString(true, true)
 }
 
 // String returns "0" for empty balances, or a list of its values separated by commas.

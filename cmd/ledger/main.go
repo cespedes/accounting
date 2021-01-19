@@ -470,7 +470,7 @@ func main2(L *accounting.Ledger, args []string) {
 	f.StringVar(&txtEndDate, "e", "", "end date")
 	f.StringVar(&txtPeriod, "p", "", "period")
 	f.Var(&flags.pivot, "pivot", "restrict transactions to those involving accounts with this partial name")
-	f.Var(&flags.currency, "currency", "restrict balance to those in this currency")
+	f.Var(&flags.currency, "currency", "only show balances in this currency")
 	f.BoolVar(&flags.batch, "batch", false, "show computer-ready results")
 	f.BoolVar(&flags.market, "market", false, "show amounts converted to market value")
 	f.BoolVar(&flags.total, "total", false, "show only total amounts")
