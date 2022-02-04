@@ -530,10 +530,12 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) (Value, er
 		if p.Currency != v.Currency || p.Value.Currency != currency {
 			continue
 		}
+		//fmt.Printf("Price: %s %s = %s\n", p.Time, p.Currency.Name, p.Value)
 		if p.Time == when {
-			p.Value.Mul(v)
+			tmp := p.Value
+			tmp.Mul(v)
 			//fmt.Printf("Convert(%s,%s,%s) = %s (2)\n", v, when.Format("2006-01-02"), currency.Name, p.Value)
-			return p.Value, nil
+			return tmp, nil
 		}
 		if p.Time.Before(when) {
 			prevTime = p.Time
@@ -572,12 +574,10 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) (Value, er
 	}
 	if nextTime == (time.Time{}) {
 		prevValue.Mul(v)
-		//fmt.Printf("Convert(%s,%s,%s) = %s (4)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
 		return prevValue, nil
 	}
 	if prevTime == (time.Time{}) {
 		nextValue.Mul(v)
-		//fmt.Printf("Convert(%s,%s,%s) = %s (5)\n", v, when.Format("2006-01-02"), currency.Name, nextValue)
 		return nextValue, nil
 	}
 	d1 := when.Sub(prevTime)
@@ -588,7 +588,6 @@ func (l *Ledger) Convert(v Value, when time.Time, currency *Currency) (Value, er
 	i.Add(i, big.NewInt(prevValue.Amount))
 	prevValue.Amount = i.Int64()
 	prevValue.Mul(v)
-	//fmt.Printf("Convert(%s,%s,%s) = %s (6)\n", v, when.Format("2006-01-02"), currency.Name, prevValue)
 	return prevValue, nil
 }
 
