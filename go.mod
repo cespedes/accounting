@@ -7,7 +7,7 @@ require (
 	github.com/lib/pq v1.3.0
 	github.com/mattn/go-runewidth v0.0.8 // indirect
 	github.com/rivo/tview v0.0.0-20200204110323-ae3d8cac5e4b // indirect
-	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 )
 
 go 1.13
